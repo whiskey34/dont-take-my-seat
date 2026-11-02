@@ -123,7 +123,21 @@
         padding: 10px 16px;
         font-size: 12px;
         color: var(--muted);
-        line-height: 1.4;
+        line-height: 1.5;
+      }
+      .hint summary {
+        cursor: pointer;
+        color: var(--text);
+      }
+      .hint p {
+        margin: 6px 0 0;
+      }
+      #share a {
+        color: #8fc5ff;
+        word-break: break-all;
+      }
+      #share div {
+        margin-top: 4px;
       }
     </style>
   </head>
@@ -132,9 +146,11 @@
       <strong id="me"></strong>
       <span id="peers"></span>
     </header>
-    <p class="hint">
-      Demo of the chat-app side. Open this page in 2–4 tabs with <code>?user=u1</code>, <code>u2</code>, <code>u3</code>, <code>u4</code>. Tabs connect to each other with WebRTC, like your chat app. Tap 🎮 to invite.
-    </p>
+    <details class="hint" open>
+      <summary>Room <strong id="roomCode"></strong>: open these links on other phones or browsers</summary>
+      <div id="share"></div>
+      <p>Each device connects to the others with WebRTC, like your chat app. Tap 🎮 to invite everyone to a game.</p>
+    </details>
     <div id="log"></div>
     <form id="composer">
       <button type="button" class="icon" id="btnGame" aria-label="Play a game">🎮</button>

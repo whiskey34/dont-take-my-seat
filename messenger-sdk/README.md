@@ -7,8 +7,10 @@ Modul ini dipasang di **chat app kamu**, supaya mini game seperti *Don't Take My
 - Undangan dan hasil game adalah **pesan chat biasa** dengan tipe khusus.
 - Tanpa server tambahan.
 
-Coba dulu cara kerjanya di chat demo (buka di 2–3 tab):
-`https://whiskey34.github.io/dont-take-my-seat/messenger-sdk/demo/index.html?user=u1` (lalu `user=u2`, `user=u3`)
+Coba dulu cara kerjanya di chat demo:
+1. Buka `https://whiskey34.github.io/dont-take-my-seat/messenger-sdk/demo/index.html` di HP pertama. Kode room dibuat otomatis.
+2. Buka tautan "Bunga" (dan "Cahya") yang tampil di halaman itu di HP atau browser lain.
+3. Setelah tulisan "Online" muncul, tekan 🎮 di HP pertama, lalu "Join game" di HP lain.
 
 Kode demo (`demo/main.ts`) adalah contoh pemasangan lengkap. Cari tulisan `SDK:` di sana.
 
