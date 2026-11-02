@@ -1,0 +1,23 @@
+name: Security
+
+on:
+  pull_request:
+  schedule:
+    - cron: '17 3 * * 1' # weekly, Monday
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # Only what ships inside the game; dev tools are not bundled.
+      - run: npm audit --omit=dev --audit-level=high
