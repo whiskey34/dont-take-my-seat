@@ -6,15 +6,22 @@ Mini game *musical chairs* di kereta komuter. Empat penumpang, kursi selalu kura
 - **Teknologi:** TypeScript, Three.js (semi 3D low-poly), Vite, Vitest.
 - **Bahasa:** English dan Indonesia (otomatis mengikuti bahasa perangkat).
 
-## Status
+## Mode bermain
 
-Prototipe **1 pemain melawan 3 bot** (offline). Multiplayer WebRTC dan integrasi messenger adalah tahap berikutnya (lihat [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)).
+| Mode | Cara |
+|---|---|
+| **Lawan bot** | Offline, 1 pemain + 3 bot |
+| **Buat room / Gabung room** | Sampai 4 HP lewat WebRTC P2P. Host membagikan kode 5 karakter; tempat kosong diisi bot |
+| **Di dalam messenger** | Dibuka dari chat; pemain dan host ditentukan oleh chat. Lihat [docs/MESSENGER_SDK.md](docs/MESSENGER_SDK.md) |
+
+Detail teknis ada di [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Cara main
 
 - Gerak: joystick di sisi kiri layar (atau WASD / panah).
 - Aksi: tombol kanan. Berubah jadi **DUDUK** di dekat kursi kosong, selain itu **DORONG**.
 - Kursi merah adalah kursi prioritas: kalau diduduki, kamu akan diminta berdiri.
+- Sensitivitas stik, nama, bahasa, dan suara bisa diatur di **Pengaturan** (juga dari menu jeda).
 
 ## Hasil build otomatis
 
@@ -40,6 +47,8 @@ npm run build    # hasil di dist/
 src/
   core/     aturan game murni (tanpa tampilan) — bisa dites & dijalankan host
   ai/       perilaku bot
+  session/  sesi offline, host, client (interpolasi & prediksi gerak)
+  net/      protokol, lobby, WebRTC, signaling kode room, adaptor messenger
   render/   tampilan 3D (Three.js)
   input/    joystick, tombol, keyboard
   ui/       HUD, menu, pengaturan, gaya

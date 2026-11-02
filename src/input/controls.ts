@@ -10,7 +10,9 @@ export class Controls {
   private origin = { x: 0, y: 0 };
   private keys = new Set<string>();
   private actionQueued = false;
-  private readonly radius = 56;
+  private radius = 56;
+  private dead = 0.12;
+  private curve = 1;
 
   constructor(
     private readonly zone: HTMLElement,
@@ -40,6 +42,18 @@ export class Controls {
     });
     window.addEventListener('keyup', (e) => this.keys.delete(e.code));
     window.addEventListener('blur', () => this.reset());
+  }
+
+  /**
+   * Stick sensitivity 1 (calm) to 5 (twitchy). Higher levels reach full
+   * speed with a shorter thumb movement and respond sooner off-centre.
+   */
+  setSensitivity(level: number): void {
+    const i = Math.max(1, Math.min(5, Math.round(level))) - 1;
+    this.radius = [80, 68, 56, 46, 38][i]!;
+    this.dead = [0.14, 0.12, 0.1, 0.08, 0.06][i]!;
+    this.curve = [1.5, 1.25, 1, 0.85, 0.7][i]!;
+    this.base.style.setProperty('--stick-size', `${this.radius * 2 + 8}px`);
   }
 
   /** Returns this tick's input. The action press is consumed. */
@@ -86,9 +100,8 @@ export class Controls {
       dy = (dy / d) * this.radius;
     }
     this.updateKnob(dx, dy);
-    const dead = 0.12;
     const mag = Math.min(1, d / this.radius);
-    const scaled = mag < dead ? 0 : (mag - dead) / (1 - dead);
+    const scaled = mag < this.dead ? 0 : ((mag - this.dead) / (1 - this.dead)) ** this.curve;
     this.stick = d > 0 ? { x: (dx / d) * scaled, y: (dy / d) * scaled } : { x: 0, y: 0 };
   };
 

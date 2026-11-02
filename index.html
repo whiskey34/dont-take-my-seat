@@ -39,11 +39,33 @@
         <div class="menu-card">
           <h1><span>Don't Take</span><span class="accent">My Seat</span></h1>
           <p class="tagline" data-t="tagline"></p>
-          <button class="btn primary" id="btnPlay" data-t="play"></button>
+          <p class="error" id="menuNotice" role="alert"></p>
+          <button class="btn primary" id="btnPlay" data-t="playBots"></button>
           <div class="row">
-            <button class="btn" id="btnHowTo" data-t="howTo"></button>
+            <button class="btn" id="btnCreate" data-t="createRoom"></button>
+            <button class="btn" id="btnJoin" data-t="joinRoom"></button>
           </div>
+          <div class="row">
+            <button class="btn subtle" id="btnHowTo" data-t="howTo"></button>
+            <button class="btn subtle" id="btnSettings" data-t="settings"></button>
+          </div>
+        </div>
+      </section>
+
+      <section class="screen dim" id="settingsScreen" hidden>
+        <div class="menu-card wide">
+          <h2 data-t="settings"></h2>
           <div class="settings">
+            <label class="setting" for="inpName"><span data-t="yourName"></span>
+              <input id="inpName" maxlength="14" autocomplete="nickname" />
+            </label>
+            <div class="setting"><span data-t="sensitivity"></span>
+              <div class="slider">
+                <span class="hint" data-t="sensCalm"></span>
+                <input type="range" id="inpSens" min="1" max="5" step="1" />
+                <span class="hint" data-t="sensQuick"></span>
+              </div>
+            </div>
             <div class="setting"><span data-t="difficulty"></span>
               <div class="seg" id="segDifficulty"><button data-v="easy" data-t="easy"></button><button data-v="normal" data-t="normal"></button></div>
             </div>
@@ -53,6 +75,40 @@
             <div class="setting"><span data-t="sound"></span>
               <div class="seg" id="segSound"><button data-v="on" data-t="on"></button><button data-v="off" data-t="off"></button></div>
             </div>
+          </div>
+          <button class="btn primary" id="btnSettingsClose" data-t="close"></button>
+        </div>
+      </section>
+
+      <section class="screen dim" id="joinScreen" hidden>
+        <form class="menu-card wide" id="joinForm" novalidate>
+          <h2 data-t="joinRoom"></h2>
+          <p class="tagline" data-t="enterCode"></p>
+          <input id="inpCode" class="code-input" maxlength="7" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="ABC23" />
+          <p class="error" id="joinError" role="alert"></p>
+          <div class="row">
+            <button type="button" class="btn" id="btnJoinBack" data-t="back"></button>
+            <button type="submit" class="btn primary" id="btnJoinGo" data-t="join"></button>
+          </div>
+        </form>
+      </section>
+
+      <section class="screen dim" id="lobby" hidden>
+        <div class="menu-card wide lobby-card">
+          <div class="lobby-head">
+            <div id="lobbyCodeBox">
+              <div class="eyebrow" data-t="roomCode"></div>
+              <div class="code-row"><span id="lobbyCode"></span><button class="btn small" id="btnCopy" data-t="copy"></button></div>
+              <p class="tagline" data-t="shareCode"></p>
+            </div>
+            <h2 id="lobbyTitle"></h2>
+          </div>
+          <ul id="lobbyList"></ul>
+          <p class="tagline" id="lobbyStatus"></p>
+          <p class="error" id="lobbyError" role="alert"></p>
+          <div class="row">
+            <button class="btn" id="btnLobbyLeave" data-t="leave"></button>
+            <button class="btn primary" id="btnLobbyStart" data-t="start"></button>
           </div>
         </div>
       </section>
@@ -75,8 +131,8 @@
           <h2 data-t="paused"></h2>
           <button class="btn primary" id="btnResume" data-t="resume"></button>
           <div class="settings">
-            <div class="setting"><span data-t="language"></span>
-              <div class="seg" id="segLang2"><button data-v="en">EN</button><button data-v="id">ID</button></div>
+            <div class="setting"><span data-t="sensitivity"></span>
+              <div class="slider"><input type="range" id="inpSens2" min="1" max="5" step="1" /></div>
             </div>
             <div class="setting"><span data-t="sound"></span>
               <div class="seg" id="segSound2"><button data-v="on" data-t="on"></button><button data-v="off" data-t="off"></button></div>
@@ -91,6 +147,7 @@
           <h2 id="overTitle"></h2>
           <p class="tagline" id="overPlace"></p>
           <ol id="standings"></ol>
+          <p class="tagline" id="overWait" hidden></p>
           <button class="btn primary" id="btnAgain" data-t="playAgain"></button>
           <button class="btn" id="btnMenu" data-t="menu"></button>
         </div>

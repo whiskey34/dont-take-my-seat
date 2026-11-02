@@ -279,7 +279,8 @@ export function trainAccel(s: GameState): Vec2 {
   };
 }
 
-function move(s: GameState, p: Player, input: PlayerInput, dt: number): void {
+/** Moves one standing player. Exported so a client can predict its own player. */
+export function move(s: GameState, p: Player, input: PlayerInput, dt: number): void {
   let mx = Number.isFinite(input.moveX) ? input.moveX : 0;
   let mz = Number.isFinite(input.moveZ) ? input.moveZ : 0;
   const len = Math.hypot(mx, mz);
@@ -309,28 +310,32 @@ function resolveCollisions(s: GameState): void {
       separate(standing[i] as Player, standing[j] as Player);
     }
   }
-  const lim = { x: car.halfLength - P.radius, z: car.aisleHalfWidth - P.radius };
-  for (const p of standing) {
-    for (const pole of POLES) {
-      const min = P.radius + car.poleRadius;
-      const dx = p.pos.x - pole.x;
-      const dz = p.pos.z - pole.z;
-      const d = Math.hypot(dx, dz);
-      if (d < min) {
-        const nx = d > 1e-6 ? dx / d : 1;
-        const nz = d > 1e-6 ? dz / d : 0;
-        p.pos.x = pole.x + nx * min;
-        p.pos.z = pole.z + nz * min;
-      }
+  for (const p of standing) constrainToCar(p);
+}
+
+/** Keeps a standing player off the poles and inside the aisle. */
+export function constrainToCar(p: Player): void {
+  for (const pole of POLES) {
+    const min = P.radius + car.poleRadius;
+    const dx = p.pos.x - pole.x;
+    const dz = p.pos.z - pole.z;
+    const d = Math.hypot(dx, dz);
+    if (d < min) {
+      const nx = d > 1e-6 ? dx / d : 1;
+      const nz = d > 1e-6 ? dz / d : 0;
+      p.pos.x = pole.x + nx * min;
+      p.pos.z = pole.z + nz * min;
     }
-    if (Math.abs(p.pos.x) > lim.x) {
-      p.pos.x = Math.sign(p.pos.x) * lim.x;
-      p.vel.x = 0;
-    }
-    if (Math.abs(p.pos.z) > lim.z) {
-      p.pos.z = Math.sign(p.pos.z) * lim.z;
-      p.vel.z = 0;
-    }
+  }
+  const limX = car.halfLength - P.radius;
+  const limZ = car.aisleHalfWidth - P.radius;
+  if (Math.abs(p.pos.x) > limX) {
+    p.pos.x = Math.sign(p.pos.x) * limX;
+    p.vel.x = 0;
+  }
+  if (Math.abs(p.pos.z) > limZ) {
+    p.pos.z = Math.sign(p.pos.z) * limZ;
+    p.vel.z = 0;
   }
 }
 

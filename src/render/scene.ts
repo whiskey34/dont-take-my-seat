@@ -208,6 +208,7 @@ export class TrainScene {
         fig.root.add(ring);
       }
       fig.root.position.set(p.pos.x, 0, p.pos.z);
+      fig.root.rotation.order = 'YXZ'; // lean follows the facing direction
       this.scene.add(fig.root);
       this.players.set(p.id, { fig, ring, visible: 1 });
     }
@@ -273,7 +274,8 @@ export class TrainScene {
 
   render(state: GameState, dt: number): void {
     this.clock += dt;
-    const k = 1 - Math.exp(-18 * dt);
+    // Positions arrive already smoothed by the session; only turning is eased here.
+    const turn = 1 - Math.exp(-14 * dt);
 
     // Players.
     for (const p of state.players) {
@@ -283,11 +285,13 @@ export class TrainScene {
       v.visible += ((p.eliminated ? 0 : 1) - v.visible) * Math.min(1, dt * 4);
       r.visible = v.visible > 0.02;
       r.scale.setScalar((0.6 + 0.4 * v.visible) * 1.18);
-      r.position.x += (p.pos.x - r.position.x) * k;
-      r.position.z += (p.pos.z - r.position.z) * k;
+      const speed = p.seatId === null ? Math.hypot(p.vel.x, p.vel.z) : 0;
+      const stride = Math.min(1, speed / CONFIG.player.speed);
+      r.position.set(p.pos.x, Math.abs(Math.sin(this.clock * 13)) * 0.05 * stride, p.pos.z);
+      r.rotation.x = 0.12 * stride;
       let dy = p.facing - r.rotation.y;
       dy = Math.atan2(Math.sin(dy), Math.cos(dy));
-      r.rotation.y += dy * k;
+      r.rotation.y += dy * turn;
       setSeated(v.fig, p.seatId !== null);
       const stunned = state.time < p.stunnedUntil;
       r.rotation.z = stunned ? Math.sin(this.clock * 40) * 0.15 : 0;
