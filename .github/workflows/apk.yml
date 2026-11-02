@@ -67,7 +67,7 @@ jobs:
             --title "Latest test build" \
             --notes "Built from ${GITHUB_SHA::7}. Download the APK on your Android phone and open it to install."
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: dont-take-my-seat-apk
           path: dont-take-my-seat.apk
