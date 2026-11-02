@@ -39,7 +39,7 @@ RtcHost/JoinTransport          MessengerTransport
 1. Host membuat kode 5 karakter. Topik MQTT dan kunci AES-GCM diturunkan dari kode itu, sehingga broker tidak bisa membaca isinya.
 2. Pemain mengirim `hello` ke topik tersebut. Host membalas dengan offer WebRTC (kandidat ICE dikumpulkan di awal), lalu pemain membalas answer.
 3. Setelah DataChannel terbuka, pemain berhenti memakai broker.
-4. Tiga broker publik dipakai sekaligus. Kalau satu mati, yang lain tetap jalan. Kondisinya dicek otomatis di CI (job `brokers`).
+4. Dua broker publik (EMQX dan HiveMQ) dipakai sekaligus. Kalau satu mati, yang lain tetap jalan. Kondisinya dicek otomatis di CI (job `brokers`).
 
 Keterbatasan: belum ada server TURN. Di sebagian jaringan seluler (CGNAT), koneksi langsung bisa gagal; Wi-Fi atau hotspot yang sama hampir selalu berhasil.
 

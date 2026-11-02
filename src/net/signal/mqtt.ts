@@ -6,10 +6,11 @@ import { parseSignal, type SignalMsg, type Signaling } from './signal';
  * - No server of our own: peers meet on a topic derived from the room code.
  * - Messages are encrypted with a key derived from the room code, so the
  *   broker (and anyone without the code) cannot read connection details.
- * - Several brokers are used at once; if one is down the others still work.
+ * - Two brokers are used at once; if one is down the other still works.
  *   Duplicates are dropped by message id.
  */
-export const BROKERS = ['wss://broker.emqx.io:8084/mqtt', 'wss://broker.hivemq.com:8884/mqtt', 'wss://mqtt.eclipseprojects.io:443/mqtt'];
+// Verified by the live broker check in CI (tests/brokers.live.test.ts).
+export const BROKERS = ['wss://broker.emqx.io:8084/mqtt', 'wss://broker.hivemq.com:8884/mqtt'];
 const CONNECT_TIMEOUT_MS = 6000;
 const KEEPALIVE_S = 30;
 
