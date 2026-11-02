@@ -4,6 +4,8 @@ Dokumen ini untuk sisi **aplikasi messenger**. Isinya: apa yang harus dibuat aga
 
 Versi SDK: **1**
 
+> **Chat app berbasis Ionic/Capacitor atau web?** Pakai modul siap pasang di [`messenger-sdk/`](../messenger-sdk/README.md). Modul itu sudah mengurus iframe, sesi, dan kanal data di atas koneksi WebRTC chat kamu. Dokumen ini menjelaskan protokol di bawahnya, yang dibutuhkan kalau kamu memakai WebView native.
+
 ## Gambaran
 
 ```
@@ -43,6 +45,7 @@ Game memanggil **salah satu** objek berikut (dicek berurutan), dengan satu argum
 
 | Platform | Yang perlu disediakan messenger |
 |---|---|
+| Web / Ionic / Capacitor (iframe) | Buka game dengan `?embed=messenger&origin=<origin chat app>`. Game memakai `parent.postMessage(json, origin)`, dan chat app membalas `iframe.contentWindow.postMessage(json, originGame)`. Sudah ditangani oleh `MiniGameHost`. |
 | Android (Kotlin/Java) | `addJavascriptInterface(obj, "MiniGameBridge")` dengan method `@JavascriptInterface fun postMessage(json: String)` |
 | Flutter (`webview_flutter`) | `addJavaScriptChannel('MiniGameBridge', onMessageReceived: ...)` |
 | Flutter (`flutter_inappwebview`) | handler bernama `miniGame` |

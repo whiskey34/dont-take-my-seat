@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Mini Game Chat Demo</title>
+    <style>
+      :root {
+        --bg: #0f1820;
+        --panel: #17232f;
+        --bubble: #223241;
+        --mine: #2a4a3a;
+        --text: #eef2f5;
+        --muted: #93a3b1;
+        --accent: #ffc02e;
+        font-family: system-ui, sans-serif;
+        color: var(--text);
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: var(--bg);
+      }
+      body {
+        display: flex;
+        flex-direction: column;
+        max-width: 640px;
+        margin: 0 auto;
+      }
+      header {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 12px max(16px, env(safe-area-inset-left, 0px));
+        background: var(--panel);
+      }
+      header strong {
+        font-size: 16px;
+      }
+      #peers {
+        margin-left: auto;
+        font-size: 12px;
+        color: var(--muted);
+      }
+      #log {
+        flex: 1;
+        overflow-y: auto;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        padding: 14px 16px;
+      }
+      .msg {
+        max-width: 80%;
+        padding: 8px 12px;
+        border-radius: 14px;
+        background: var(--bubble);
+        font-size: 14px;
+      }
+      .msg .who {
+        display: block;
+        font-size: 11px;
+        color: var(--muted);
+        margin-bottom: 2px;
+      }
+      .mine {
+        align-self: flex-end;
+        background: var(--mine);
+      }
+      .card-row {
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+      }
+      .card-row.mine-card {
+        align-items: flex-end;
+      }
+      .card-row .who {
+        font-size: 11px;
+        color: var(--muted);
+      }
+      form {
+        display: flex;
+        gap: 8px;
+        padding: 10px max(16px, env(safe-area-inset-left, 0px)) calc(10px + env(safe-area-inset-bottom, 0px));
+        background: var(--panel);
+      }
+      input {
+        flex: 1;
+        min-width: 0;
+        height: 42px;
+        padding: 0 12px;
+        border-radius: 21px;
+        border: 1px solid #2c3d4c;
+        background: var(--bg);
+        color: var(--text);
+        font: inherit;
+      }
+      button.icon {
+        width: 42px;
+        height: 42px;
+        border-radius: 50%;
+        border: 0;
+        background: var(--accent);
+        font-size: 20px;
+        cursor: pointer;
+      }
+      button.send {
+        height: 42px;
+        padding: 0 16px;
+        border-radius: 21px;
+        border: 0;
+        background: #2f6f9e;
+        color: #fff;
+        font-weight: 700;
+        cursor: pointer;
+      }
+      .hint {
+        padding: 10px 16px;
+        font-size: 12px;
+        color: var(--muted);
+        line-height: 1.4;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <strong id="me"></strong>
+      <span id="peers"></span>
+    </header>
+    <p class="hint">
+      Demo of the chat-app side. Open this page in 2–4 tabs with <code>?user=u1</code>, <code>u2</code>, <code>u3</code>, <code>u4</code>. Tabs connect to each other with WebRTC, like your chat app. Tap 🎮 to invite.
+    </p>
+    <div id="log"></div>
+    <form id="composer">
+      <button type="button" class="icon" id="btnGame" aria-label="Play a game">🎮</button>
+      <input id="text" placeholder="Message" autocomplete="off" />
+      <button type="submit" class="send">Send</button>
+    </form>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

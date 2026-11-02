@@ -43,8 +43,32 @@ declare global {
   }
 }
 
-/** Finds whichever bridge the host app injected (Android, iOS, React Native, Flutter). */
+let iframeBridge: ((json: string) => void) | null | undefined;
+
+/**
+ * Inside a web-based messenger (Ionic/Capacitor, PWA) the game runs in an
+ * iframe opened with ?embed=messenger&origin=<messenger origin>. Messages go
+ * through postMessage, and only the parent window at that origin is trusted.
+ */
+function setupIframeBridge(): ((json: string) => void) | null {
+  if (iframeBridge !== undefined) return iframeBridge;
+  iframeBridge = null;
+  const params = new URLSearchParams(location.search);
+  if (params.get('embed') !== 'messenger' || window.parent === window) return null;
+  const origin = params.get('origin');
+  if (!origin) return null;
+  window.addEventListener('message', (e: MessageEvent) => {
+    if (e.source !== window.parent || e.origin !== origin || typeof e.data !== 'string') return;
+    window.miniGameReceive?.(e.data);
+  });
+  iframeBridge = (json) => window.parent.postMessage(json, origin);
+  return iframeBridge;
+}
+
+/** Finds whichever bridge the host app provides (iframe, Android, iOS, React Native, Flutter). */
 export function findBridge(): ((json: string) => void) | null {
+  const iframe = setupIframeBridge();
+  if (iframe) return iframe;
   const w = window;
   if (w.MiniGameBridge?.postMessage) return (j) => w.MiniGameBridge!.postMessage(j);
   if (w.webkit?.messageHandlers?.miniGame) return (j) => w.webkit!.messageHandlers!.miniGame!.postMessage(j);

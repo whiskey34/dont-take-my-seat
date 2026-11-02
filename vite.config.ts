@@ -10,6 +10,13 @@ export default defineConfig({
   build: {
     target: 'es2020',
     chunkSizeWarningLimit: 900,
+    rollupOptions: {
+      input: {
+        game: 'index.html',
+        // Demo chat that uses the messenger SDK (published next to the game).
+        chatDemo: 'messenger-sdk/demo/index.html',
+      },
+    },
   },
   test: {
     include: ['tests/**/*.test.ts'],

@@ -63,6 +63,9 @@ class App {
     this.bindUi();
     this.resize();
     window.addEventListener('resize', () => this.resize());
+    // Browsers only allow sound after a tap; players who join from the chat
+    // never press "Play", so any tap unlocks it.
+    window.addEventListener('pointerdown', () => unlockAudio(), { passive: true });
     document.addEventListener('visibilitychange', () => {
       if (document.hidden && this.mode === 'playing') this.pause();
     });
