@@ -9,7 +9,7 @@ import { parseSignal, type SignalMsg, type Signaling } from './signal';
  * - Several brokers are used at once; if one is down the others still work.
  *   Duplicates are dropped by message id.
  */
-export const BROKERS = ['wss://broker.emqx.io:8084/mqtt', 'wss://broker.hivemq.com:8884/mqtt', 'wss://test.mosquitto.org:8081/mqtt'];
+export const BROKERS = ['wss://broker.emqx.io:8084/mqtt', 'wss://broker.hivemq.com:8884/mqtt', 'wss://mqtt.eclipseprojects.io:443/mqtt'];
 const CONNECT_TIMEOUT_MS = 6000;
 const KEEPALIVE_S = 30;
 
