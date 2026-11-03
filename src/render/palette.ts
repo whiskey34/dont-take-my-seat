@@ -21,4 +21,6 @@ export const SCENE = {
   npcSkins: ['#e8c3a0', '#d9a77f', '#c68b62', '#a8704a', '#f1d2b6'],
   elderHair: '#f5f5f5',
   shadow: '#1d2733',
+  earphones: '#a855f7',
+  pillow: '#7dd3fc',
 } as const;

@@ -1,7 +1,7 @@
-import type { GameEvent, GameState, Phase, Player, PlayerSetup, Seat } from '../core/types';
+import { CHALLENGE_KINDS, POWER_UP_KINDS, type ChallengeKind, type GameEvent, type GameState, type Phase, type Player, type PlayerSetup, type PowerUpKind, type Seat } from '../core/types';
 
 /** Bump when messages change incompatibly; peers with another version are refused. */
-export const PROTOCOL_VERSION = 1;
+export const PROTOCOL_VERSION = 2;
 export const MAX_NAME = 14;
 
 export interface LobbyPlayer {
@@ -40,8 +40,15 @@ export interface Snapshot {
   free: number[];
   trap: number;
   winner: string;
-  /** [id, x, z, vx, vz, facing, seat, eliminated, elimRound, stunnedUntil, pushReadyAt, kickAt] */
-  p: Array<[string, number, number, number, number, number, number, 0 | 1, number, number, number, number]>;
+  /** [id, x, z, vx, vz, facing, seat, eliminated, elimRound, stunnedUntil, pushReadyAt, kickAt, shieldUntil, sleeping] */
+  p: Array<[string, number, number, number, number, number, number, 0 | 1, number, number, number, number, number, 0 | 1]>;
+  /** Challenge of this stop ('' none), sudden-brake end time, open door side. */
+  ch: ChallengeKind | '';
+  bk: number;
+  ds: -1 | 0 | 1;
+  /** Standing passengers [id, x, z] and power-ups [id, kind, x, z]. */
+  st: Array<[number, number, number]>;
+  pu: Array<[number, PowerUpKind, number, number]>;
   /** One char per seat: '0' empty, '1' NPC. */
   npc: string;
   /** [seatId, playerId] for occupied seats. */
@@ -73,7 +80,14 @@ export function packSnapshot(s: GameState): Snapshot {
       r3(p.stunnedUntil),
       r3(p.pushReadyAt),
       p.kickAt === null ? -1 : r3(p.kickAt),
+      r3(p.shieldUntil),
+      p.sleeping ? 1 : 0,
     ]),
+    ch: s.challenge ?? '',
+    bk: r3(s.brakeUntil),
+    ds: s.doorSide,
+    st: s.standers.map((x) => [x.id, r3(x.pos.x), r3(x.pos.z)]),
+    pu: s.powerUps.map((u) => [u.id, u.kind, r3(u.pos.x), r3(u.pos.z)]),
     npc: s.seats.map((x) => (x.npc ? '1' : '0')).join(''),
     occ: s.seats.filter((x) => x.playerId !== null).map((x) => [x.id, x.playerId as string]),
   };
@@ -102,6 +116,12 @@ export function applySnapshot(s: GameState, snap: Snapshot): void {
     const seat = s.seats[id];
     if (seat) seat.playerId = pid;
   }
+  s.challenge = snap.ch || null;
+  s.brakeUntil = snap.bk;
+  s.doorSide = snap.ds;
+  // Standers only need a position on clients; their next move comes from the host.
+  s.standers = snap.st.map(([id, x, z]) => ({ id, pos: { x, z }, target: { x, z }, moveAt: Infinity }));
+  s.powerUps = snap.pu.map(([id, kind, x, z]) => ({ id, kind, pos: { x, z } }));
 }
 
 export function applyPlayerRow(p: Player, row: Snapshot['p'][number]): void {
@@ -114,6 +134,8 @@ export function applyPlayerRow(p: Player, row: Snapshot['p'][number]): void {
   p.stunnedUntil = row[9];
   p.pushReadyAt = row[10];
   p.kickAt = row[11] >= 0 ? row[11] : null;
+  p.shieldUntil = row[12];
+  p.sleeping = row[13] === 1;
 }
 
 // --------------------------------------------------------------- validation
@@ -195,7 +217,15 @@ function isSnapshot(v: unknown): v is Snapshot {
   if (!Array.isArray(v.free) || !v.free.every(isInt) || !isInt(v.trap) || !isStr(v.winner)) return false;
   if (typeof v.npc !== 'string' || v.npc.length > 200 || !Array.isArray(v.occ) || !Array.isArray(v.p) || v.p.length > 4) return false;
   if (!v.occ.every((o) => Array.isArray(o) && o.length === 2 && isInt(o[0]) && isStr(o[1]))) return false;
-  return v.p.every((row) => Array.isArray(row) && row.length === 12 && isStr(row[0]) && row.slice(1).every(isNum));
+  if (!v.p.every((row) => Array.isArray(row) && row.length === 14 && isStr(row[0]) && row.slice(1).every(isNum))) return false;
+  if (v.ch !== '' && !CHALLENGE_KINDS.includes(v.ch as ChallengeKind)) return false;
+  if (!isNum(v.bk) || (v.ds !== -1 && v.ds !== 0 && v.ds !== 1)) return false;
+  if (!Array.isArray(v.st) || v.st.length > 12 || !v.st.every((r) => Array.isArray(r) && r.length === 3 && r.every(isNum))) return false;
+  return (
+    Array.isArray(v.pu) &&
+    v.pu.length <= 4 &&
+    v.pu.every((r) => Array.isArray(r) && r.length === 4 && isInt(r[0]) && POWER_UP_KINDS.includes(r[1] as PowerUpKind) && isNum(r[2]) && isNum(r[3]))
+  );
 }
 
 function isEvent(e: unknown): e is GameEvent {
@@ -215,7 +245,16 @@ function isEvent(e: unknown): e is GameEvent {
     case 'replay':
       return true;
     case 'winner':
+    case 'shielded':
       return isStr(e.playerId);
+    case 'challenge':
+      return CHALLENGE_KINDS.includes(e.kind as ChallengeKind);
+    case 'suddenBrake':
+      return true;
+    case 'powerUp':
+      return isStr(e.playerId) && POWER_UP_KINDS.includes(e.kind as PowerUpKind);
+    case 'slept':
+      return isStr(e.playerId) && isInt(e.seatId);
     default:
       return false;
   }

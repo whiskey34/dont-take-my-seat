@@ -21,6 +21,13 @@ Detail teknis ada di [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 - Gerak: joystick di sisi kiri layar (atau WASD / panah).
 - Aksi: tombol kanan. Berubah jadi **DUDUK** di dekat kursi kosong, selain itu **DORONG**.
 - Kursi merah adalah kursi prioritas: kalau diduduki, kamu akan diminta berdiri.
+- **Challenge acak di setiap stasiun**, diumumkan di papan stasiun:
+  - **Rem mendadak:** kereta tersentak sekali; siapa pun yang sedang diam akan oleng.
+  - **Penumpang berdiri:** penumpang di lorong menghalangi jalan dan sesekali bergeser.
+  - **Pintu satu sisi:** hanya pintu kiri atau kanan yang terbuka, dan penumpang baru masuk lalu berdiri di lorong sisi itu.
+- **Power-up di lantai** (satu per stasiun, ambil dengan berjalan di atasnya):
+  - 🎧 **Earphone:** kebal dorongan selama 4 detik.
+  - 💤 **Pura-pura tidur:** sekali duduk di kursi prioritas tanpa disuruh berdiri.
 - Sensitivitas stik, nama, bahasa, dan suara bisa diatur di **Pengaturan** (juga dari menu jeda).
 
 ## Hasil build otomatis

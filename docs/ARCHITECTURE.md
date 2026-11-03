@@ -52,6 +52,12 @@ intro → riding (kereta jalan, goyang, lalu mengerem)
       → riding ... → gameOver
 ```
 
+## Challenge dan power-up
+
+- Logikanya ada di `src/core/challenges.ts`, dan angkanya (kekuatan rem, jumlah penumpang, durasi earphone) di `CONFIG.challenge` dan `CONFIG.powerUp`.
+- Challenge dipilih acak (RNG ber-seed) saat kereta berangkat dari setiap stasiun, jadi host dan replay selalu konsisten.
+- Snapshot multiplayer (protokol **v2**) membawa challenge, waktu rem, sisi pintu, posisi penumpang berdiri, power-up, serta status earphone dan pura-pura tidur tiap pemain. Pemain dengan versi game berbeda akan ditolak dengan pesan jelas.
+
 ## Parameter URL untuk pengembangan
 
 | Parameter | Fungsi |

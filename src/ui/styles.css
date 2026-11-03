@@ -150,6 +150,13 @@ button {
   line-height: 1.15;
 }
 
+#boardChallenge {
+  margin-top: 3px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #ffb4a8;
+}
+
 #timer {
   height: 4px;
   margin-top: 6px;
@@ -245,6 +252,11 @@ button {
 
 #banner.bad {
   background: var(--danger);
+}
+
+#banner.warn {
+  background: var(--accent);
+  color: var(--ink);
 }
 
 #labels .tag {

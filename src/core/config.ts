@@ -42,6 +42,24 @@ export const CONFIG = {
 
   sway: { amp: 1.4, freq: 0.85 },
   brakeAccel: 5.5,
+
+  challenge: {
+    // Sudden brake: hits once, somewhere in this window after the train leaves.
+    brakeWindow: [0.8, 2.0],
+    brakeAccel: 13,
+    brakeDuration: 0.55,
+    brakeStun: 0.6, // for anyone standing still when it hits
+    // Standing passengers (crowd) and passengers boarding at one-side doors.
+    crowdCount: 4,
+    boardingCount: 3,
+    standerRadius: 0.3,
+    standerSpeed: 0.8,
+  },
+
+  powerUp: {
+    pickRange: 0.6,
+    shieldTime: 4,
+  },
 } as const;
 
 export const STATIONS = [

@@ -3,7 +3,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { CONFIG } from '../core/config';
 import { BENCH_SEGMENTS, createSeats, POLES, seatSitPos } from '../core/layout';
 import { trainAccel } from '../core/game';
-import type { GameEvent, GameState, Seat } from '../core/types';
+import type { GameEvent, GameState, PowerUpKind, Seat } from '../core/types';
 import { createFigure, setSeated, type Figure } from './figure';
 import { PLAYER_COLORS, SCENE } from './palette';
 
@@ -24,6 +24,7 @@ interface NpcAnim {
 interface PlayerView {
   fig: Figure;
   ring: THREE.Mesh | null;
+  shield: THREE.Mesh;
   visible: number; // 0..1 fade
 }
 
@@ -42,6 +43,11 @@ export class TrainScene {
   private readonly players = new Map<string, PlayerView>();
   private readonly pulses: Array<{ mesh: THREE.Mesh; t: number }> = [];
   private backdrop!: THREE.Texture;
+  private readonly standers = new Map<number, Figure>();
+  private readonly items = new Map<number, THREE.Group>();
+  private readonly doorGlow: Array<{ mesh: THREE.Mesh; side: 1 | -1 }> = [];
+  private readonly camBase = new THREE.Vector3();
+  private shake = 0;
   private trainSpeed = 0;
   private doorOpen = 0;
   private clock = 0;
@@ -57,6 +63,7 @@ export class TrainScene {
     this.buildCar();
     this.buildSeats();
     this.buildBackdrop();
+    this.buildDoorGlow();
   }
 
   // ------------------------------------------------------------ building
@@ -193,6 +200,48 @@ export class TrainScene {
     this.scene.add(plane);
   }
 
+  /** Bright strips that mark which side's doors are open. */
+  private buildDoorGlow(): void {
+    const geo = new THREE.PlaneGeometry(car.doorHalfWidth * 2 - 0.2, 0.8);
+    for (const dx of car.doorsX) {
+      for (const side of [-1, 1] as const) {
+        const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: '#fff7c2', transparent: true, opacity: 0, depthWrite: false }));
+        mesh.rotation.x = -Math.PI / 2;
+        mesh.position.set(dx, 0.015, side * (WALL_Z - 0.3));
+        this.scene.add(mesh);
+        this.doorGlow.push({ mesh, side });
+      }
+    }
+  }
+
+  private makeItem(kind: PowerUpKind): THREE.Group {
+    const g = new THREE.Group();
+    const mat = (c: string) => new THREE.MeshLambertMaterial({ color: c, emissive: c, emissiveIntensity: 0.35, flatShading: true });
+    if (kind === 'earphones') {
+      const band = new THREE.Mesh(new THREE.TorusGeometry(0.17, 0.035, 6, 16, Math.PI), mat(SCENE.earphones));
+      band.position.y = 0.05;
+      const cupGeo = new THREE.CylinderGeometry(0.07, 0.07, 0.07, 12);
+      for (const sx of [-1, 1]) {
+        const cup = new THREE.Mesh(cupGeo, mat(SCENE.earphones));
+        cup.rotation.z = Math.PI / 2;
+        cup.position.set(sx * 0.17, 0.03, 0);
+        g.add(cup);
+      }
+      g.add(band);
+    } else {
+      const pillow = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.12, 0.26), mat(SCENE.pillow));
+      const moon = new THREE.Mesh(new THREE.IcosahedronGeometry(0.07, 1), mat('#fde68a'));
+      moon.position.set(0.12, 0.16, 0);
+      g.add(pillow, moon);
+    }
+    const glow = new THREE.Mesh(new THREE.RingGeometry(0.22, 0.32, 24), new THREE.MeshBasicMaterial({ color: kind === 'earphones' ? SCENE.earphones : SCENE.pillow, transparent: true, opacity: 0.6, depthWrite: false }));
+    glow.rotation.x = -Math.PI / 2;
+    glow.userData.floor = true;
+    g.add(glow);
+    g.scale.setScalar(1.8);
+    return g;
+  }
+
   // ------------------------------------------------------------ players
 
   setPlayers(state: GameState, humanId: string | null): void {
@@ -207,10 +256,18 @@ export class TrainScene {
         ring.position.y = 0.02;
         fig.root.add(ring);
       }
+      const shield = new THREE.Mesh(
+        new THREE.TorusGeometry(0.42, 0.03, 6, 28),
+        new THREE.MeshBasicMaterial({ color: SCENE.earphones, transparent: true, opacity: 0.8, depthWrite: false }),
+      );
+      shield.rotation.x = Math.PI / 2;
+      shield.position.y = 0.62;
+      shield.visible = false;
+      fig.root.add(shield);
       fig.root.position.set(p.pos.x, 0, p.pos.z);
       fig.root.rotation.order = 'YXZ'; // lean follows the facing direction
       this.scene.add(fig.root);
-      this.players.set(p.id, { fig, ring, visible: 1 });
+      this.players.set(p.id, { fig, ring, shield, visible: 1 });
     }
   }
 
@@ -235,6 +292,11 @@ export class TrainScene {
       if (e.type === 'sat') {
         const p = state.players.find((q) => q.id === e.playerId);
         if (p) this.pulse(p.pos.x, p.pos.z, SCENE.freeMarker);
+      }
+      if (e.type === 'suddenBrake') this.shake = 0.6;
+      if (e.type === 'powerUp' || e.type === 'shielded') {
+        const p = state.players.find((q) => q.id === e.playerId);
+        if (p) this.pulse(p.pos.x, p.pos.z, SCENE.earphones);
       }
     }
   }
@@ -296,7 +358,12 @@ export class TrainScene {
       const stunned = state.time < p.stunnedUntil;
       r.rotation.z = stunned ? Math.sin(this.clock * 40) * 0.15 : 0;
       if (v.ring) v.ring.visible = p.seatId === null;
+      v.shield.visible = state.time < p.shieldUntil && !p.eliminated;
+      if (v.shield.visible) v.shield.rotation.z += dt * 3;
     }
+
+    this.syncStanders(state, dt);
+    this.syncItems(state);
 
     // Free seats glow while they are free.
     const scramble = state.phase === 'scramble';
@@ -329,8 +396,14 @@ export class TrainScene {
     }
 
     // Doors slide open at the station.
-    const open = state.phase === 'scramble' ? 1 : 0;
+    // The modelled doors are on the far wall (side -1); the near wall is cut away.
+    const open = state.phase === 'scramble' && state.doorSide !== 1 ? 1 : 0;
     this.doorOpen += (open - this.doorOpen) * Math.min(1, dt * 6);
+    for (const g of this.doorGlow) {
+      const lit = state.phase === 'scramble' && (state.doorSide === 0 || state.doorSide === g.side);
+      const mat = g.mesh.material as THREE.MeshBasicMaterial;
+      mat.opacity += ((lit ? 0.75 + 0.25 * Math.sin(this.clock * 7) : 0) - mat.opacity) * Math.min(1, dt * 8);
+    }
     for (const pair of this.doors) for (const leaf of pair) leaf.position.x = leaf.userData.baseX + leaf.userData.dir * this.doorOpen * (car.doorHalfWidth - 0.1);
 
     // Scenery moves while the train runs, slows when braking.
@@ -355,7 +428,58 @@ export class TrainScene {
 
     // Camera rolls a little with the sway.
     this.camera.rotation.z = (-accel.z / CONFIG.sway.amp) * 0.006;
+    this.shake = Math.max(0, this.shake - dt);
+    const jolt = this.shake * 0.25;
+    this.camera.position.set(this.camBase.x + Math.sin(this.clock * 55) * jolt, this.camBase.y + Math.sin(this.clock * 43) * jolt * 0.5, this.camBase.z);
     this.renderer.render(this.scene, this.camera);
+  }
+
+  /** Standing passengers: create, move and remove figures to match the state. */
+  private syncStanders(state: GameState, dt: number): void {
+    const k = 1 - Math.exp(-12 * dt);
+    const seen = new Set<number>();
+    for (const st of state.standers) {
+      seen.add(st.id);
+      let fig = this.standers.get(st.id);
+      if (!fig) {
+        fig = createFigure(SCENE.npcBodies[st.id % SCENE.npcBodies.length]!, npcSkin(st.id + 3), st.id % 2 === 0);
+        fig.root.position.set(st.pos.x, 0, st.pos.z);
+        this.scene.add(fig.root);
+        this.standers.set(st.id, fig);
+      }
+      const r = fig.root;
+      const dx = st.pos.x - r.position.x;
+      const dz = st.pos.z - r.position.z;
+      if (Math.hypot(dx, dz) > 0.002) r.rotation.y = Math.atan2(dx, dz);
+      r.position.x += dx * k;
+      r.position.z += dz * k;
+    }
+    for (const [id, fig] of this.standers) {
+      if (seen.has(id)) continue;
+      this.scene.remove(fig.root);
+      this.standers.delete(id);
+    }
+  }
+
+  private syncItems(state: GameState): void {
+    const seen = new Set<number>();
+    for (const u of state.powerUps) {
+      seen.add(u.id);
+      let g = this.items.get(u.id);
+      if (!g) {
+        g = this.makeItem(u.kind);
+        this.scene.add(g);
+        this.items.set(u.id, g);
+      }
+      g.position.set(u.pos.x, 0.45 + Math.sin(this.clock * 3 + u.id) * 0.1, u.pos.z);
+      g.rotation.y = this.clock * 1.8;
+      for (const c of g.children) if (c.userData.floor) c.position.y = (-g.position.y + 0.02) / g.scale.y;
+    }
+    for (const [id, g] of this.items) {
+      if (seen.has(id)) continue;
+      this.scene.remove(g);
+      this.items.delete(id);
+    }
   }
 
   resize(width: number, height: number): void {
@@ -372,6 +496,7 @@ export class TrainScene {
     const angle = THREE.MathUtils.degToRad(52);
     this.camera.position.set(0, this.camTarget.y + Math.sin(angle) * dist, this.camTarget.z + Math.cos(angle) * dist);
     this.camera.lookAt(this.camTarget);
+    this.camBase.copy(this.camera.position);
     this.camera.updateProjectionMatrix();
   }
 

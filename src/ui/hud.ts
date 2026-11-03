@@ -21,6 +21,7 @@ export class Hud {
   private readonly board = $('board');
   private readonly boardLabel = $('boardLabel');
   private readonly boardStation = $('boardStation');
+  private readonly boardChallenge = $('boardChallenge');
   private readonly timerFill = $('timerFill');
   private readonly seatsLeft = $('seatsLeft');
   private readonly banner = $('banner');
@@ -85,6 +86,21 @@ export class Hud {
           }
           break;
         }
+        case 'challenge':
+          this.flash(challengeText(state), 'warn', 2200);
+          break;
+        case 'suddenBrake':
+          this.flash(t('brakeNow'), 'bad', 1200);
+          break;
+        case 'powerUp':
+          if (e.playerId === me) this.flash(e.kind === 'earphones' ? t('gotEarphones') : t('gotSleep'), 'good', 1800);
+          break;
+        case 'shielded':
+          if (e.playerId === me) this.flash(t('shieldBlocked'), 'good', 1000);
+          break;
+        case 'slept':
+          if (e.playerId === me) this.flash(t('sleptSafe'), 'good', 1600);
+          break;
         case 'replay':
           this.flash(t('replay'), 'plain', 2000);
           break;
@@ -94,7 +110,7 @@ export class Hud {
     }
   }
 
-  private flash(text: string, kind: 'good' | 'bad' | 'plain' | 'none', ms: number): void {
+  private flash(text: string, kind: 'good' | 'bad' | 'warn' | 'plain' | 'none', ms: number): void {
     window.clearTimeout(this.bannerTimer);
     this.banner.textContent = text;
     this.banner.className = kind === 'none' ? '' : `show ${kind}`;
@@ -108,6 +124,9 @@ export class Hud {
       state.phase === 'intro' ? t('getReady') : braking || state.phase === 'scramble' || state.phase === 'result' ? t('arrivingAt') : t('nextStation');
     this.boardLabel.textContent = label;
     this.boardStation.textContent = state.station;
+    const ch = state.phase === 'riding' || state.phase === 'scramble' ? challengeText(state) : '';
+    this.boardChallenge.textContent = ch;
+    this.boardChallenge.hidden = !ch;
     this.board.classList.toggle('scramble', state.phase === 'scramble');
     const total = PHASE_LENGTH[state.phase];
     const left = total ? Math.max(0, state.phaseEndsAt - state.time) / total : 0;
@@ -124,7 +143,7 @@ export class Hud {
       if (chip) {
         chip.classList.toggle('out', p.eliminated);
         chip.classList.toggle('seated', p.seatId !== null && !p.eliminated);
-        (chip.querySelector('.name') as HTMLElement).textContent = this.displayName(p);
+        (chip.querySelector('.name') as HTMLElement).textContent = this.tagText(p, state.time);
         (chip.querySelector('.state') as HTMLElement).textContent = p.eliminated ? t('out') : p.seatId !== null ? t('seated') : t('standing');
       }
       const tag = this.tags.get(p.id);
@@ -132,7 +151,7 @@ export class Hud {
         const pos = scene.labelPos(state, p.id, width, height);
         tag.hidden = !pos;
         if (pos) {
-          tag.textContent = this.displayName(p);
+          tag.textContent = this.tagText(p, state.time);
           tag.style.left = `${pos.x}px`;
           tag.style.top = `${pos.y}px`;
         }
@@ -144,6 +163,12 @@ export class Hud {
 
   private displayName(p: Player): string {
     return p.id === this.humanId ? t('you') : p.name;
+  }
+
+  /** Name plus icons for active power-ups. */
+  private tagText(p: Player, time: number): string {
+    const icons = (time < p.shieldUntil ? ' 🎧' : '') + (p.sleeping ? ' 💤' : '');
+    return this.displayName(p) + icons;
   }
 
   private updateAction(state: GameState): void {
@@ -158,5 +183,19 @@ export class Hud {
     const cooling = !canSit && cooldownLeft > 0;
     this.actionBtn.classList.toggle('cooling', cooling || (!canSit && !pushTarget(state, me)));
     if (this.actionRing) this.actionRing.style.strokeDashoffset = String(289 * (1 - (cooling ? cooldownLeft : 0)));
+  }
+}
+
+/** The current stop's challenge, as shown on the station board. */
+export function challengeText(state: GameState): string {
+  switch (state.challenge) {
+    case 'suddenBrake':
+      return t('chBrake');
+    case 'crowd':
+      return t('chCrowd');
+    case 'oneSideDoors':
+      return state.doorSide === -1 ? t('chDoorsLeft') : t('chDoorsRight');
+    default:
+      return '';
   }
 }

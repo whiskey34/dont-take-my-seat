@@ -147,6 +147,10 @@ class App {
       if (e.type === 'pushed' && (e.by === me || e.target === me)) play('push');
       if (e.type === 'sat' && e.playerId === me) play('sit');
       if (e.type === 'kicked' && e.playerId === me) play('kick');
+      if (e.type === 'suddenBrake') play('brake');
+      if (e.type === 'powerUp' && e.playerId === me) play('pickup');
+      if (e.type === 'shielded' && e.playerId === me) play('block');
+      if (e.type === 'slept' && e.playerId === me) play('pickup');
       if (e.type === 'eliminated' && e.playerIds.includes(me)) play('out');
       if (e.type === 'winner') {
         if (e.playerId === me) play('win');

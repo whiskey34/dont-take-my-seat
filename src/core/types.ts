@@ -29,6 +29,8 @@ export interface Player {
   stunnedUntil: number;
   pushReadyAt: number;
   kickAt: number | null; // set while sitting on a priority seat
+  shieldUntil: number; // earphones: pushes have no effect until then
+  sleeping: boolean; // "pretend to sleep": the next priority seat is kept
 }
 
 export interface Seat {
@@ -41,6 +43,27 @@ export interface Seat {
 }
 
 export type Phase = 'intro' | 'riding' | 'scramble' | 'result' | 'gameOver';
+
+/** One random challenge per station. */
+export type ChallengeKind = 'suddenBrake' | 'crowd' | 'oneSideDoors';
+export const CHALLENGE_KINDS: readonly ChallengeKind[] = ['suddenBrake', 'crowd', 'oneSideDoors'];
+
+export type PowerUpKind = 'earphones' | 'sleep';
+export const POWER_UP_KINDS: readonly PowerUpKind[] = ['earphones', 'sleep'];
+
+/** A standing NPC passenger: an obstacle that drifts around the aisle. */
+export interface Stander {
+  id: number;
+  pos: Vec2;
+  target: Vec2;
+  moveAt: number;
+}
+
+export interface PowerUp {
+  id: number;
+  kind: PowerUpKind;
+  pos: Vec2;
+}
 
 export interface GameState {
   time: number;
@@ -56,6 +79,15 @@ export interface GameState {
   trapSeatId: number | null;
   winnerId: PlayerId | null;
   rngState: number;
+  challenge: ChallengeKind | null;
+  /** Sudden brake: when it starts, and until when it pulls everyone forward. */
+  brakeAt: number | null;
+  brakeUntil: number;
+  /** Which wall's doors open at this stop: -1 far, 1 near, 0 both. */
+  doorSide: -1 | 0 | 1;
+  standers: Stander[];
+  powerUps: PowerUp[];
+  nextId: number;
 }
 
 export type GameEvent =
@@ -66,7 +98,12 @@ export type GameEvent =
   | { type: 'kicked'; playerId: PlayerId; seatId: number }
   | { type: 'eliminated'; playerIds: PlayerId[] }
   | { type: 'replay' }
-  | { type: 'winner'; playerId: PlayerId };
+  | { type: 'winner'; playerId: PlayerId }
+  | { type: 'challenge'; kind: ChallengeKind }
+  | { type: 'suddenBrake' }
+  | { type: 'powerUp'; playerId: PlayerId; kind: PowerUpKind }
+  | { type: 'shielded'; playerId: PlayerId }
+  | { type: 'slept'; playerId: PlayerId; seatId: number };
 
 export interface PlayerSetup {
   id: PlayerId;

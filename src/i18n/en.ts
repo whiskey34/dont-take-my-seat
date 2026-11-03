@@ -18,6 +18,8 @@ export const en = {
     'No seat when the doors close? You are out.',
     'Tap PUSH to shove a rival out of your way.',
     'Red seats are priority seats. Sit there and you will be asked to stand.',
+    'Every station has a challenge: a sudden brake (keep moving), standing passengers in the way, or doors on one side only.',
+    'Grab the item on the floor: 🎧 earphones block pushes, 💤 pretending to sleep keeps a priority seat once.',
     'Last passenger seated wins.',
   ],
   you: 'You',
@@ -86,6 +88,15 @@ export const en = {
   errNoRtc: "This browser can't make direct connections. Try the app or Chrome.",
   errMessenger: "Couldn't connect to the chat. Close the game and open it again.",
   chatResult: "{name} kept the seat in Don't Take My Seat!",
+  chBrake: '⚠ Sudden brake ahead: keep moving',
+  chCrowd: '👥 Standing passengers in the aisle',
+  chDoorsLeft: '🚪 Doors open on the left (top) side',
+  chDoorsRight: '🚪 Doors open on the right (bottom) side',
+  brakeNow: 'Sudden brake!',
+  gotEarphones: '🎧 Earphones! Pushes bounce off for 4 seconds',
+  gotSleep: '💤 Pretend to sleep! Keep a priority seat once',
+  shieldBlocked: '🎧 Push blocked!',
+  sleptSafe: '💤 Zzz… nobody asks you to stand',
 };
 
 export type Strings = typeof en;

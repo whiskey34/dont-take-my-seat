@@ -1,5 +1,5 @@
 /** Tiny synthesized sound effects: no audio files to download. */
-type Sound = 'chime' | 'push' | 'sit' | 'out' | 'win' | 'kick' | 'tick';
+type Sound = 'chime' | 'push' | 'sit' | 'out' | 'win' | 'kick' | 'tick' | 'brake' | 'pickup' | 'block';
 
 let ctx: AudioContext | null = null;
 let enabled = true;
@@ -58,6 +58,16 @@ export function play(sound: Sound): void {
       break;
     case 'win':
       [523, 659, 784, 1046].forEach((f, i) => tone(f, i * 0.11, 0.3, 'triangle', 0.16));
+      break;
+    case 'brake': // wheels screeching
+      tone(1800, 0, 0.5, 'sawtooth', 0.05, 900);
+      tone(1400, 0.02, 0.45, 'square', 0.03, 700);
+      break;
+    case 'pickup':
+      [660, 880, 1320].forEach((f, i) => tone(f, i * 0.06, 0.15, 'triangle', 0.14));
+      break;
+    case 'block':
+      tone(420, 0, 0.12, 'sine', 0.14, 620);
       break;
     case 'tick':
       tone(1200, 0, 0.04, 'square', 0.05);

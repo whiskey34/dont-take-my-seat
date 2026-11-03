@@ -1,3 +1,4 @@
+import { keepOutOfStanders } from '../core/challenges';
 import { constrainToCar, createGame, move } from '../core/game';
 import type { GameEvent, GameState, Player, PlayerInput, PlayerSetup, Vec2 } from '../core/types';
 import { withPositions, type GameSession } from '../session/session';
@@ -179,6 +180,8 @@ export class ClientSession implements GameSession {
     me.seatId = server.seatId;
     me.eliminated = server.eliminated;
     me.stunnedUntil = server.stunnedUntil;
+    me.shieldUntil = server.shieldUntil;
+    me.sleeping = server.sleeping;
     const active = (this.state.phase === 'riding' || this.state.phase === 'scramble') && server.seatId === null && !server.eliminated;
     if (!active || this.snaps.length === 0) {
       me.pos = { ...server.pos };
@@ -187,7 +190,9 @@ export class ClientSession implements GameSession {
       return;
     }
     const now = this.hostNow();
-    move({ ...this.state, time: now }, me, input, dt);
+    const predicted = { ...this.state, time: now };
+    move(predicted, me, input, dt);
+    keepOutOfStanders(predicted, me);
     constrainToCar(me);
 
     // Where the host probably has us now: last known position moved on by its velocity.

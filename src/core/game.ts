@@ -1,3 +1,4 @@
+import { boardPassengers, collectPowerUps, isShielded, keepOutOfStanders, startChallenge, updateChallenge } from './challenges';
 import { CONFIG, STATIONS } from './config';
 import { createSeats, POLES, seatFront, seatSitPos } from './layout';
 import { nextRandom, pickDistinct } from './rng';
@@ -27,6 +28,8 @@ export function createGame(setups: readonly PlayerSetup[], seed: number): GameSt
     stunnedUntil: 0,
     pushReadyAt: 0,
     kickAt: null,
+    shieldUntil: 0,
+    sleeping: false,
   }));
   const state: GameState = {
     time: 0,
@@ -40,6 +43,13 @@ export function createGame(setups: readonly PlayerSetup[], seed: number): GameSt
     trapSeatId: null,
     winnerId: null,
     rngState: seed | 0,
+    challenge: null,
+    brakeAt: null,
+    brakeUntil: 0,
+    doorSide: 0,
+    standers: [],
+    powerUps: [],
+    nextId: 1,
   };
   placeStandingPlayers(state);
   return state;
@@ -78,6 +88,7 @@ export function step(s: GameState, inputs: ReadonlyMap<PlayerId, PlayerInput>, d
   s.time += dt;
 
   if (s.phase === 'riding' || s.phase === 'scramble') {
+    updateChallenge(s, inputs, dt, events);
     for (const p of s.players) {
       if (p.eliminated) continue;
       const input = inputs.get(p.id) ?? NO_INPUT;
@@ -85,6 +96,7 @@ export function step(s: GameState, inputs: ReadonlyMap<PlayerId, PlayerInput>, d
       if (p.seatId === null) move(s, p, input, dt);
     }
     resolveCollisions(s);
+    collectPowerUps(s, events);
     handlePriorityKicks(s, events);
   }
 
@@ -104,7 +116,7 @@ function setPhase(s: GameState, phase: Phase, duration: number, events: GameEven
 function advancePhase(s: GameState, events: GameEvent[]): void {
   switch (s.phase) {
     case 'intro':
-      startRound(s);
+      startRound(s, events);
       setPhase(s, 'riding', PH.riding, events);
       break;
     case 'riding':
@@ -125,7 +137,7 @@ function advancePhase(s: GameState, events: GameEvent[]): void {
         setPhase(s, 'gameOver', Infinity, events);
       } else {
         s.round++;
-        startRound(s);
+        startRound(s, events);
         setPhase(s, 'riding', PH.riding, events);
       }
       break;
@@ -134,7 +146,7 @@ function advancePhase(s: GameState, events: GameEvent[]): void {
   }
 }
 
-function startRound(s: GameState): void {
+function startRound(s: GameState, events: GameEvent[]): void {
   s.station = STATIONS[s.round % STATIONS.length] ?? STATIONS[0];
   for (const seat of s.seats) {
     seat.npc = true;
@@ -147,8 +159,10 @@ function startRound(s: GameState): void {
     p.kickAt = null;
     p.vel = { x: 0, z: 0 };
     p.stunnedUntil = 0;
+    p.shieldUntil = 0;
   }
   placeStandingPlayers(s);
+  startChallenge(s, events);
 }
 
 /** Standing players start spread along the aisle around the middle door. */
@@ -179,6 +193,7 @@ function openDoors(s: GameState, events: GameEvent[]): void {
     const seat = s.seats[id];
     if (seat) seat.npc = false;
   }
+  boardPassengers(s);
   events.push({ type: 'doorsOpen', seatIds: [...free, ...trap] });
 }
 
@@ -221,6 +236,12 @@ function handleAction(s: GameState, p: Player, input: PlayerInput, events: GameE
     p.facing = seat.side > 0 ? Math.PI : 0;
     p.kickAt = seat.priority ? s.time + CONFIG.priorityKickDelay : null;
     events.push({ type: 'sat', playerId: p.id, seatId: seat.id });
+    if (seat.priority && p.sleeping) {
+      // Pretending to sleep: nobody asks you to stand up.
+      p.sleeping = false;
+      p.kickAt = null;
+      events.push({ type: 'slept', playerId: p.id, seatId: seat.id });
+    }
     return;
   }
 
@@ -230,11 +251,16 @@ function handleAction(s: GameState, p: Player, input: PlayerInput, events: GameE
   const dx = target.pos.x - p.pos.x;
   const dz = target.pos.z - p.pos.z;
   const len = Math.hypot(dx, dz) || 1;
+  p.pushReadyAt = s.time + PUSH.cooldown;
+  p.facing = Math.atan2(dx, dz);
+  if (isShielded(s, target)) {
+    // Earphones in: the push does nothing.
+    events.push({ type: 'shielded', playerId: target.id });
+    return;
+  }
   target.vel.x += (dx / len) * PUSH.impulse;
   target.vel.z += (dz / len) * PUSH.impulse;
   target.stunnedUntil = s.time + PUSH.stun;
-  p.pushReadyAt = s.time + PUSH.cooldown;
-  p.facing = Math.atan2(dx, dz);
   events.push({ type: 'pushed', by: p.id, target: target.id });
 }
 
@@ -273,8 +299,9 @@ function handlePriorityKicks(s: GameState, events: GameEvent[]): void {
 export function trainAccel(s: GameState): Vec2 {
   if (s.phase !== 'riding') return { x: 0, z: 0 };
   const braking = s.phaseEndsAt - s.time < PH.braking;
+  const jolt = s.time < s.brakeUntil ? CONFIG.challenge.brakeAccel : 0;
   return {
-    x: braking ? CONFIG.brakeAccel : 0,
+    x: (braking ? CONFIG.brakeAccel : 0) + jolt,
     z: CONFIG.sway.amp * Math.sin(s.time * Math.PI * 2 * CONFIG.sway.freq),
   };
 }
@@ -310,7 +337,10 @@ function resolveCollisions(s: GameState): void {
       separate(standing[i] as Player, standing[j] as Player);
     }
   }
-  for (const p of standing) constrainToCar(p);
+  for (const p of standing) {
+    keepOutOfStanders(s, p);
+    constrainToCar(p);
+  }
 }
 
 /** Keeps a standing player off the poles and inside the aisle. */

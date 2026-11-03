@@ -99,6 +99,27 @@ describe('protocol', () => {
     expect(copy.players[0]!.pos.x).toBeCloseTo(g.players[0]!.pos.x, 2);
   });
 
+  it('carries challenges, standing passengers and power-ups', () => {
+    const setups = ['a', 'b', 'c'].map((id) => ({ id, name: id, isBot: true }));
+    for (let seed = 1; seed < 40; seed++) {
+      const g = createGame(setups, seed);
+      for (let i = 0; i < 60 * 7; i++) step(g, new Map(), 1 / 60); // into the scramble
+      g.players[1]!.sleeping = true;
+      g.players[2]!.shieldUntil = g.time + 2;
+      const copy = createGame(setups, 999);
+      const msg = parseHostMsg(JSON.stringify({ t: 'snap', s: packSnapshot(g) }));
+      if (msg?.t !== 'snap') throw new Error('snapshot rejected');
+      applySnapshot(copy, msg.s);
+      expect(copy.challenge).toBe(g.challenge);
+      expect(copy.doorSide).toBe(g.doorSide);
+      expect(copy.standers.map((x) => x.id)).toEqual(g.standers.map((x) => x.id));
+      expect(copy.powerUps.map((x) => x.kind)).toEqual(g.powerUps.map((x) => x.kind));
+      expect(copy.players[1]!.sleeping).toBe(true);
+      expect(copy.players[2]!.shieldUntil).toBeCloseTo(g.players[2]!.shieldUntil, 2);
+    }
+    expect(parseHostMsg(JSON.stringify({ t: 'ev', e: [{ type: 'powerUp', playerId: 'a', kind: 'rocket' }] }))).toBeNull();
+  });
+
   it('rejects malformed and hostile messages', () => {
     expect(parseClientMsg('not json')).toBeNull();
     expect(parseClientMsg('{"t":"in","s":1,"x":"1","z":0}')).toBeNull();

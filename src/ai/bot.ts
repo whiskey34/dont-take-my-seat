@@ -16,6 +16,7 @@ export interface BotBrain {
   wander: Vec2;
   wanderUntil: number;
   wantsTrap: boolean | null;
+  wantsPowerUp: boolean | null;
 }
 
 export function createBrain(seed: number, level: 'easy' | 'normal' = 'normal'): BotBrain {
@@ -32,6 +33,7 @@ export function createBrain(seed: number, level: 'easy' | 'normal' = 'normal'): 
     wander: { x: 0, z: 0 },
     wanderUntil: 0,
     wantsTrap: null,
+    wantsPowerUp: null,
   };
 }
 
@@ -52,14 +54,19 @@ export function botThink(s: GameState, me: Player, b: BotBrain, dt: number): Pla
     b.scrambleSeenAt = null;
     b.targetSeatId = null;
     b.wantsTrap = null;
+    if (b.wantsPowerUp === null) b.wantsPowerUp = rand(b) < 0.55;
+    const item = s.powerUps[0];
+    if (b.wantsPowerUp && item && dist(me.pos, item.pos) < 6) return steer(s, me, item.pos, b.speed * 0.8, maybePush(s, me, b, dt, 0.25));
     if (s.time >= b.wanderUntil) {
       b.wander = { x: me.pos.x + (rand(b) - 0.5) * 3, z: (rand(b) - 0.5) * 1.6 };
       b.wanderUntil = s.time + 0.8 + rand(b) * 1.5;
     }
-    return steer(me, b.wander, 0.35, maybePush(s, me, b, dt, 0.25));
+    // Keep moving a little so a sudden brake does not knock us over.
+    return steer(s, me, b.wander, 0.35, maybePush(s, me, b, dt, 0.25));
   }
 
   if (s.phase !== 'scramble') return NO_INPUT;
+  b.wantsPowerUp = null;
   if (b.scrambleSeenAt === null) b.scrambleSeenAt = s.time;
   if (s.time - b.scrambleSeenAt < b.reaction) return NO_INPUT;
 
@@ -74,7 +81,7 @@ export function botThink(s: GameState, me: Player, b: BotBrain, dt: number): Pla
   const blocked = s.players.some(
     (o) => o !== me && !o.eliminated && o.seatId === null && dist(o.pos, front) < dist(me.pos, front) && dist(o.pos, me.pos) < CONFIG.push.range,
   );
-  return steer(me, goal, b.speed, blocked && maybePush(s, me, b, dt, 1));
+  return steer(s, me, goal, b.speed, blocked && maybePush(s, me, b, dt, 1));
 }
 
 function chooseSeat(s: GameState, me: Player, b: BotBrain): Seat | undefined {
@@ -83,7 +90,8 @@ function chooseSeat(s: GameState, me: Player, b: BotBrain): Seat | undefined {
 
   const open = s.seats.filter((seat) => !seat.npc && seat.playerId === null);
   if (open.length === 0) return undefined;
-  if (b.wantsTrap === null) b.wantsTrap = rand(b) < b.trapChance;
+  // With "pretend to sleep" the priority seat is safe, so take it gladly.
+  if (b.wantsTrap === null || me.sleeping) b.wantsTrap = me.sleeping || rand(b) < b.trapChance;
   const candidates = b.wantsTrap ? open : open.filter((seat) => !seat.priority);
   const pool = candidates.length > 0 ? candidates : open;
   // Prefer seats we can reach before the others, with a little noise.
@@ -110,11 +118,30 @@ function maybePush(s: GameState, me: Player, b: BotBrain, dt: number, scale: num
   return rand(b) < b.aggression * scale * dt;
 }
 
-function steer(me: Player, goal: Vec2, strength: number, action: boolean): PlayerInput {
+function steer(s: GameState, me: Player, goal: Vec2, strength: number, action: boolean): PlayerInput {
   const dx = goal.x - me.pos.x;
   const dz = goal.z - me.pos.z;
   const d = Math.hypot(dx, dz);
   if (d < 0.08) return { moveX: 0, moveZ: 0, action };
+  let ux = dx / d;
+  let uz = dz / d;
+  // Sidestep standing passengers that are just ahead.
+  for (const st of s.standers) {
+    const ox = st.pos.x - me.pos.x;
+    const oz = st.pos.z - me.pos.z;
+    const ahead = ox * ux + oz * uz;
+    if (ahead <= 0 || ahead > 1.4 || ahead > d) continue;
+    const side = ox * -uz + oz * ux; // >0: obstacle on the left
+    if (Math.abs(side) > CONFIG.player.radius + CONFIG.challenge.standerRadius + 0.15) continue;
+    const away = side > 0 ? -1 : 1;
+    const px = -uz * away;
+    const pz = ux * away;
+    ux += px * 1.2;
+    uz += pz * 1.2;
+    const n = Math.hypot(ux, uz) || 1;
+    ux /= n;
+    uz /= n;
+  }
   const k = Math.min(1, d / 0.5) * strength;
-  return { moveX: (dx / d) * k, moveZ: (dz / d) * k, action };
+  return { moveX: ux * k, moveZ: uz * k, action };
 }
