@@ -61,5 +61,7 @@ export default defineConfig({
   ],
   test: {
     include: ['tests/**/*.test.ts'],
+    // Whole-game simulations take ~2 s; leave room for slow CI machines.
+    testTimeout: 20_000,
   },
 });

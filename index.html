@@ -91,6 +91,9 @@
           <h2 data-t="joinRoom"></h2>
           <p class="tagline" data-t="enterCode"></p>
           <input id="inpCode" class="code-input" maxlength="7" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="ABC23" />
+          <label class="name-field" for="inpJoinName"><span data-t="yourName"></span>
+            <input id="inpJoinName" class="name-input" maxlength="14" autocomplete="nickname" />
+          </label>
           <p class="error" id="joinError" role="alert"></p>
           <div class="row">
             <button type="button" class="btn" id="btnJoinBack" data-t="back"></button>
@@ -110,6 +113,9 @@
             <h2 id="lobbyTitle"></h2>
           </div>
           <ul id="lobbyList"></ul>
+          <label class="name-field" for="inpLobbyName"><span data-t="yourName"></span>
+            <input id="inpLobbyName" class="name-input" maxlength="14" autocomplete="nickname" />
+          </label>
           <p class="tagline" id="lobbyStatus"></p>
           <p class="error" id="lobbyError" role="alert"></p>
           <div class="row">

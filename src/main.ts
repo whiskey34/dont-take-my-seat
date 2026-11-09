@@ -12,7 +12,7 @@ import { installMockMessenger } from './net/mockMessenger';
 import { cleanName, type LobbyPlayer } from './net/protocol';
 import { RtcHostTransport, RtcJoinTransport } from './net/rtc/room';
 import { LocalSignaling } from './net/signal/local';
-import { MqttSignaling } from './net/signal/mqtt';
+import { RoomSignaling } from './net/signal/roomSignaling';
 import { newRoomCode, normalizeCode, randomId, type Signaling } from './net/signal/signal';
 import { PLAYER_COLORS } from './render/palette';
 import { TrainScene } from './render/scene';
@@ -34,7 +34,7 @@ type Net =
   | { kind: 'client'; client: ClientNet; code: string | null; messenger: MessengerTransport | null };
 
 function makeSignaling(code: string): Signaling {
-  return params.get('signal') === 'local' ? new LocalSignaling(code) : new MqttSignaling(code);
+  return params.get('signal') === 'local' ? new LocalSignaling(code) : new RoomSignaling(code);
 }
 
 function cryptoRandom(): number {
@@ -77,6 +77,24 @@ class App {
     this.syncInstall();
     installMockMessenger(params);
     if (findBridge()) void this.openFromMessenger();
+  }
+
+  /** Whether friends can currently reach our room (host with a room code). */
+  private relayUp: () => boolean = () => true;
+
+  /** Stores a new name everywhere it is shown, and tells the room. */
+  private saveName(raw: string): void {
+    const name = raw.trim() ? cleanName(raw) : '';
+    if (name === this.settings.name) return;
+    this.settings.name = name;
+    saveSettings(this.settings);
+    for (const id of ['inpName', 'inpJoinName', 'inpLobbyName']) {
+      const el = $<HTMLInputElement>(id);
+      if (document.activeElement !== el) el.value = name;
+    }
+    const net = this.net;
+    if (net?.kind === 'host') net.host.rename(this.name);
+    if (net?.kind === 'client') net.client.rename(this.name);
   }
 
   private get name(): string {
@@ -182,6 +200,9 @@ class App {
     const transport = new RtcHostTransport(signaling, randomId('h'), () => host?.accepting ?? false);
     host = new HostNet(transport, this.name, { lobby: (p) => this.renderLobby(p) });
     this.net = { kind: 'host', host, code, messenger: null };
+    // Tell the host when friends cannot reach the room (e.g. right after switching apps).
+    if (signaling instanceof RoomSignaling) signaling.onStatus(() => this.renderLobby(this.lobbyPlayers));
+    this.relayUp = () => !(signaling instanceof RoomSignaling) || signaling.isUp;
     this.renderLobby(host.players);
   }
 
@@ -195,6 +216,7 @@ class App {
       $('joinError').textContent = t('errNoRtc');
       return;
     }
+    this.saveName($<HTMLInputElement>('inpJoinName').value);
     const signaling = makeSignaling(code);
     this.openLobby({ code, isHost: false, status: t('connecting') });
     try {
@@ -204,7 +226,15 @@ class App {
       return this.lobbyFailed(t('errNoSignal'));
     }
     if (this.mode !== 'lobby') return signaling.close();
-    const transport = new RtcJoinTransport(signaling, randomId('p'), () => this.connectionClosed('timeout'));
+    const transport = new RtcJoinTransport(
+      signaling,
+      () => randomId('p'),
+      (reason) => this.connectionClosed(reason),
+      (stage) => {
+        if (this.mode !== 'lobby' || this.lobbyPlayers.length > 0) return;
+        $('lobbyStatus').textContent = { searching: t('searchingRoom'), connecting: t('roomFound'), retrying: t('retryingRoom') }[stage];
+      },
+    );
     const client = new ClientNet(transport, null, this.name, this.clientCallbacks());
     this.net = { kind: 'client', client, code, messenger: null };
   }
@@ -250,6 +280,7 @@ class App {
       version: t('errVersion'),
       hostLeft: t('errHostLeft'),
       timeout: t('errTimeout'),
+      unreachable: t('errUnreachable'),
     }[reason];
     this.net = null;
     if (this.mode === 'lobby') this.lobbyFailed(text);
@@ -268,6 +299,8 @@ class App {
 
   private openLobby(o: { code: string | null; isHost: boolean; status: string }): void {
     this.mode = 'lobby';
+    this.relayUp = () => true;
+    $<HTMLInputElement>('inpLobbyName').value = this.name;
     this.hud.show(false);
     this.lobbyPlayers = [];
     $('lobbyCodeBox').hidden = !o.code;
@@ -318,11 +351,15 @@ class App {
       items.push(li);
     }
     list.replaceChildren(...items);
+    const status = $('lobbyStatus');
+    status.classList.remove('warn');
     if (this.net?.kind === 'host') {
       $<HTMLButtonElement>('btnLobbyStart').disabled = false;
-      $('lobbyStatus').textContent = t('botsFill');
+      const reachable = this.relayUp();
+      status.textContent = reachable ? t('botsFill') : t('relayDown');
+      status.classList.toggle('warn', !reachable);
     } else if (players.length > 0) {
-      $('lobbyStatus').textContent = t('waitingHost');
+      status.textContent = t('waitingHost');
     }
   }
 
@@ -413,7 +450,7 @@ class App {
       el.textContent = t(el.dataset.t as Parameters<typeof t>[0]);
     });
     $('rulesList').replaceChildren(...rules().map((r) => Object.assign(document.createElement('li'), { textContent: r })));
-    $<HTMLInputElement>('inpName').placeholder = t('namePlaceholder');
+    for (const id of ['inpName', 'inpJoinName', 'inpLobbyName']) $<HTMLInputElement>(id).placeholder = t('namePlaceholder');
     document.title = t('title');
     this.syncControls();
     if (this.mode === 'lobby') this.renderLobby(this.lobbyPlayers);
@@ -448,6 +485,7 @@ class App {
     on('btnJoin', () => {
       this.notice('');
       $('joinError').textContent = '';
+      $<HTMLInputElement>('inpJoinName').value = this.settings.name;
       this.show('joinScreen');
       $('inpCode').focus();
     });
@@ -506,11 +544,15 @@ class App {
         this.save();
       });
     }
-    $<HTMLInputElement>('inpName').addEventListener('change', (e) => {
-      const v = (e.target as HTMLInputElement).value;
-      this.settings.name = v.trim() ? cleanName(v) : '';
-      this.save();
-    });
+    // Names save while typing, from the settings, the join screen or the lobby.
+    for (const id of ['inpName', 'inpJoinName', 'inpLobbyName']) {
+      const el = $<HTMLInputElement>(id);
+      el.addEventListener('input', () => this.saveName(el.value));
+      el.addEventListener('change', () => {
+        this.saveName(el.value);
+        el.value = this.settings.name;
+      });
+    }
   }
 
   private resize(): void {

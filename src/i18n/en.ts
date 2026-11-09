@@ -79,7 +79,7 @@ export const en = {
   chatPlayers: 'Players from this chat',
   rematchWait: 'Waiting for the host to start the next game…',
   errNoSignal: "Can't reach the matchmaking service. Check your internet and try again.",
-  errTimeout: "Couldn't connect to that room. Check the code and that the host is still in the lobby.",
+  errTimeout: "Couldn't find that room. Check the code, and ask the host to keep the game open in the lobby.",
   errFull: 'That room is full (4 players).',
   errStarted: 'That game has already started. Ask the host to finish and start again.',
   errVersion: 'Your game version is different from the host. Update both apps.',
@@ -99,6 +99,11 @@ export const en = {
   sleptSafe: '💤 Zzz… nobody asks you to stand',
   installApp: '⬇ Install app',
   installIos: 'To install on iPhone: tap Share, then “Add to Home Screen”.',
+  searchingRoom: 'Looking for the room…',
+  roomFound: 'Room found, connecting…',
+  retryingRoom: 'Direct connection failed, trying again…',
+  relayDown: 'Lost the matchmaking service, reconnecting… Friends cannot join until it is back.',
+  errUnreachable: 'Found the room, but your phones could not connect directly. Try the same Wi-Fi or hotspot, or turn off a VPN.',
 };
 
 export type Strings = typeof en;

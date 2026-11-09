@@ -81,7 +81,7 @@ export const id: Strings = {
   chatPlayers: 'Pemain dari chat ini',
   rematchWait: 'Menunggu host memulai game berikutnya…',
   errNoSignal: 'Tidak bisa menghubungi layanan pencarian room. Cek internetmu lalu coba lagi.',
-  errTimeout: 'Gagal terhubung ke room itu. Cek kodenya dan pastikan host masih di lobby.',
+  errTimeout: 'Room tidak ditemukan. Cek kodenya, dan minta host tetap membuka game di lobby.',
   errFull: 'Room itu sudah penuh (4 pemain).',
   errStarted: 'Game di room itu sudah dimulai. Minta host menyelesaikan lalu mulai lagi.',
   errVersion: 'Versi game-mu berbeda dengan host. Perbarui kedua aplikasi.',
@@ -101,4 +101,9 @@ export const id: Strings = {
   sleptSafe: '💤 Zzz… tidak ada yang menyuruhmu berdiri',
   installApp: '⬇ Pasang aplikasi',
   installIos: 'Pasang di iPhone: ketuk Bagikan, lalu “Tambahkan ke Layar Utama”.',
+  searchingRoom: 'Mencari room…',
+  roomFound: 'Room ditemukan, menyambungkan…',
+  retryingRoom: 'Koneksi langsung gagal, mencoba lagi…',
+  relayDown: 'Koneksi ke layanan pencarian room terputus, menyambung ulang… Teman belum bisa gabung sampai tersambung lagi.',
+  errUnreachable: 'Room ditemukan, tapi HP kalian tidak bisa tersambung langsung. Coba pakai Wi-Fi atau hotspot yang sama, atau matikan VPN.',
 };

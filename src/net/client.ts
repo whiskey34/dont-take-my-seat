@@ -9,7 +9,7 @@ import type { Transport } from './transport';
 const INTERP_DELAY = 0.12;
 const INPUT_INTERVAL = 1 / 30;
 
-export type CloseReason = RejectReason | 'hostLeft' | 'timeout';
+export type CloseReason = RejectReason | 'hostLeft' | 'timeout' | 'unreachable';
 
 export interface ClientCallbacks {
   lobby(players: LobbyPlayer[]): void;
@@ -27,7 +27,7 @@ export class ClientNet {
   constructor(
     private readonly transport: Transport,
     private hostId: string | null,
-    private readonly name: string,
+    private name: string,
     private readonly cb: ClientCallbacks,
   ) {
     transport.setHandlers({
@@ -47,6 +47,12 @@ export class ClientNet {
 
   get id(): string | null {
     return this.myId;
+  }
+
+  /** Changes our name in the lobby (the host treats a repeated hello as a rename). */
+  rename(name: string): void {
+    this.name = name;
+    if (this.myId) this.send({ t: 'hello', v: PROTOCOL_VERSION, name });
   }
 
   leave(): void {

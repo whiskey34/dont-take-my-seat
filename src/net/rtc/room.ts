@@ -2,9 +2,9 @@ import { HandlerSlot, type Channel, type Transport, type TransportHandlers } fro
 import type { Signaling, SignalMsg } from '../signal/signal';
 import { Peer } from './peer';
 
-const PENDING_TIMEOUT_MS = 20_000;
+const PENDING_TIMEOUT_MS = 16_000;
 const HELLO_INTERVAL_MS = 1500;
-const JOIN_TIMEOUT_MS = 25_000;
+const JOIN_TIMEOUT_MS = 60_000;
 
 /** Host side: answers every "hello" in the room with an offer (star topology). */
 export class RtcHostTransport implements Transport {
@@ -74,34 +74,52 @@ export class RtcHostTransport implements Transport {
   }
 }
 
-/** Joiner side: says hello until a host offers, then answers. */
+export type JoinStage = 'searching' | 'connecting' | 'retrying';
+export type JoinFailure = 'timeout' | 'unreachable';
+
+const ATTEMPT_TIMEOUT_MS = 15_000;
+
+/**
+ * Joiner side: says hello until a host offers, then answers.
+ * If the direct connection does not come up, it starts over with a fresh id
+ * (so the host makes a fresh offer) until the overall timeout.
+ */
 export class RtcJoinTransport implements Transport {
   private readonly slot = new HandlerSlot();
   private peer: Peer | null = null;
   private hostId: string | null = null;
+  private id: string;
   private hello: ReturnType<typeof setInterval> | null = null;
   private timeout: ReturnType<typeof setTimeout> | null = null;
+  private attemptTimer: ReturnType<typeof setTimeout> | null = null;
+  private foundHost = false;
+  private connected = false;
   private closed = false;
 
   constructor(
     private readonly signaling: Signaling,
-    readonly selfId: string,
-    private readonly onFail: (reason: 'timeout') => void,
+    private readonly newId: () => string,
+    private readonly onFail: (reason: JoinFailure) => void,
+    private readonly onStage: (stage: JoinStage) => void = () => {},
+    joinTimeoutMs = JOIN_TIMEOUT_MS,
   ) {
+    this.id = newId();
     signaling.onMessage((m) => void this.onSignal(m));
-    const sayHello = () => signaling.publish({ type: 'hello', from: selfId });
-    sayHello();
-    this.hello = setInterval(sayHello, HELLO_INTERVAL_MS);
+    this.startHello();
+    this.onStage('searching');
     this.timeout = setTimeout(() => {
-      if (!this.peer?.isOpen) {
-        this.close();
-        this.onFail('timeout');
-      }
-    }, JOIN_TIMEOUT_MS);
+      if (this.connected) return;
+      this.close();
+      this.onFail(this.foundHost ? 'unreachable' : 'timeout');
+    }, joinTimeoutMs);
+  }
+
+  get selfId(): string {
+    return this.id;
   }
 
   peers(): string[] {
-    return this.peer?.isOpen && this.hostId ? [this.hostId] : [];
+    return this.connected && this.hostId ? [this.hostId] : [];
   }
 
   send(to: string, channel: Channel, data: string): void {
@@ -119,36 +137,64 @@ export class RtcJoinTransport implements Transport {
     this.peer?.close();
   }
 
+  private startHello(): void {
+    if (this.hello) clearInterval(this.hello);
+    const sayHello = () => this.signaling.publish({ type: 'hello', from: this.id });
+    sayHello();
+    this.hello = setInterval(sayHello, HELLO_INTERVAL_MS);
+  }
+
   private stopSignaling(): void {
     if (this.hello) clearInterval(this.hello);
     if (this.timeout) clearTimeout(this.timeout);
+    if (this.attemptTimer) clearTimeout(this.attemptTimer);
     this.hello = null;
     this.timeout = null;
+    this.attemptTimer = null;
     this.signaling.close();
   }
 
+  /** The direct connection did not come up: forget this attempt and ask again. */
+  private retry(peer: Peer): void {
+    if (this.closed || this.connected || this.peer !== peer) return;
+    if (this.attemptTimer) clearTimeout(this.attemptTimer);
+    this.attemptTimer = null;
+    this.peer = null;
+    this.hostId = null;
+    peer.onClose = () => {};
+    peer.close();
+    this.id = this.newId();
+    this.onStage('retrying');
+    this.startHello();
+  }
+
   private async onSignal(m: SignalMsg): Promise<void> {
-    if (this.closed || m.type !== 'offer' || m.to !== this.selfId || this.peer) return;
+    if (this.closed || m.type !== 'offer' || m.to !== this.id || this.peer) return;
     const host = m.from;
     const peer = new Peer();
     this.peer = peer;
     this.hostId = host;
+    this.foundHost = true;
+    this.onStage('connecting');
     if (this.hello) clearInterval(this.hello);
+    this.hello = null;
     peer.onOpen = () => {
-      // Connected directly; the public broker is no longer needed.
+      this.connected = true;
+      // Connected directly; the public relays are no longer needed.
       this.stopSignaling();
       this.slot.peerOpen(host);
     };
     peer.onMessage = (ch, data) => this.slot.message(host, ch, data);
-    peer.onClose = () => this.slot.peerClose(host);
+    peer.onClose = () => {
+      if (this.connected) this.slot.peerClose(host);
+      else this.retry(peer);
+    };
+    this.attemptTimer = setTimeout(() => this.retry(peer), ATTEMPT_TIMEOUT_MS);
     try {
       const sdp = await peer.acceptOffer(m.sdp);
-      this.signaling.publish({ type: 'answer', from: this.selfId, to: host, sdp });
+      if (this.peer === peer) this.signaling.publish({ type: 'answer', from: this.id, to: host, sdp });
     } catch {
-      this.peer = null;
-      this.hostId = null;
-      peer.close();
-      this.hello = setInterval(() => this.signaling.publish({ type: 'hello', from: this.selfId }), HELLO_INTERVAL_MS);
+      this.retry(peer);
     }
   }
 }

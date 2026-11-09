@@ -6,7 +6,7 @@
  * connections, like a P2P chat app.
  */
 import { LocalSignaling } from '../../src/net/signal/local';
-import { MqttSignaling } from '../../src/net/signal/mqtt';
+import { RoomSignaling } from '../../src/net/signal/roomSignaling';
 import { newRoomCode, normalizeCode, type Signaling, type SignalMsg } from '../../src/net/signal/signal';
 import { createInvite, GameLinks, MiniGameHost, parseInvite, renderInviteCard, renderResultCard, type GameInvite, type GameResultCard } from '../src';
 
@@ -47,7 +47,7 @@ document.addEventListener('visibilitychange', () => games.handleLifecycle(!docum
 // MQTT brokers), standing in for the chat app's own signaling. Add
 // ?signal=local to connect tabs of one browser without internet.
 const chatChannels = new Map<string, RTCDataChannel>();
-const signal: Signaling = params.get('signal') === 'local' ? new LocalSignaling(`demo-${room}`) : new MqttSignaling(`demo-${room}`);
+const signal: Signaling = params.get('signal') === 'local' ? new LocalSignaling(`demo-${room}`) : new RoomSignaling(`demo-${room}`);
 
 function newConnection(peerId: string): RTCPeerConnection {
   const pc = new RTCPeerConnection({

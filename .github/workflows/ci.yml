@@ -23,8 +23,8 @@ jobs:
       - run: npm test
       - run: npm run build
 
-  # Checks that the free public brokers used for room codes still work.
-  # Informational: a broker being down should not block a merge.
+  # Checks that the free public relays used for room codes still work.
+  # Informational: a relay being down should not block a merge.
   brokers:
     runs-on: ubuntu-latest
     continue-on-error: true
@@ -38,3 +38,17 @@ jobs:
       - run: npx vitest run tests/brokers.live.test.ts
         env:
           LIVE_BROKERS: '1'
+          # Candidate Nostr relays being evaluated (not used by the game yet).
+          EXTRA_NOSTR: wss://nostr.mom,wss://relay.nostr.band,wss://offchain.pub,wss://relay.snort.social
+
+  # Checks free public TURN servers from a real browser. Informational.
+  turn:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm i --no-save playwright@1.56.1 && npx playwright install chromium
+      - run: node tests/live/turn-check.mjs

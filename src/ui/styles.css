@@ -792,3 +792,32 @@ input:focus-visible {
   margin: 0;
   font-size: 12px;
 }
+
+.name-field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.name-input {
+  flex: 1;
+  max-width: 220px;
+  height: 36px;
+  padding: 0 12px;
+  border-radius: 9px;
+  border: 1px solid var(--line);
+  background: rgba(0, 0, 0, 0.3);
+  color: var(--text);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+#lobbyStatus.warn {
+  color: #ffb4a8;
+}

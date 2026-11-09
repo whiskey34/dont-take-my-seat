@@ -1,11 +1,23 @@
 import { CONFIG } from '../core/config';
 import type { GameEvent, GameState, PlayerInput, PlayerSetup } from '../core/types';
 import { Simulation, type Difficulty, type GameSession } from '../session/session';
-import { packSnapshot, parseClientMsg, PROTOCOL_VERSION, type HostMsg, type LobbyPlayer } from './protocol';
+import { cleanName, MAX_NAME, packSnapshot, parseClientMsg, PROTOCOL_VERSION, type HostMsg, type LobbyPlayer } from './protocol';
 import type { Channel, Transport } from './transport';
 
 const SNAP_INTERVAL = 1 / 20;
 export const BOT_NAMES = ['Budi', 'Sari', 'Dimas', 'Rina', 'Agus', 'Wulan'];
+
+/** Two players called "Budi" become "Budi" and "Budi 2". */
+export function uniqueName(wanted: string, players: readonly LobbyPlayer[], selfId: string): string {
+  const base = cleanName(wanted);
+  const taken = new Set(players.filter((p) => p.id !== selfId).map((p) => p.name.toLowerCase()));
+  if (!taken.has(base.toLowerCase())) return base;
+  for (let n = 2; ; n++) {
+    const suffix = ` ${n}`;
+    const candidate = base.slice(0, MAX_NAME - suffix.length) + suffix;
+    if (!taken.has(candidate.toLowerCase())) return candidate;
+  }
+}
 
 export interface HostCallbacks {
   lobby(players: LobbyPlayer[]): void;
@@ -24,7 +36,7 @@ export class HostNet {
     hostName: string,
     private readonly cb: HostCallbacks,
   ) {
-    this.lobbyPlayers = [{ id: transport.selfId, name: hostName }];
+    this.lobbyPlayers = [{ id: transport.selfId, name: cleanName(hostName) }];
     transport.setHandlers({
       message: (from, _ch, data) => this.onMessage(from, data),
       peerOpen: () => {
@@ -41,6 +53,14 @@ export class HostNet {
 
   get players(): LobbyPlayer[] {
     return [...this.lobbyPlayers];
+  }
+
+  /** The host changes their own name in the lobby. */
+  rename(name: string): void {
+    const me = this.lobbyPlayers[0];
+    if (!me) return;
+    me.name = uniqueName(name, this.lobbyPlayers, me.id);
+    this.publishLobby();
   }
 
   /** Starts (or restarts) a game with everyone in the lobby; bots fill the rest. */
@@ -81,8 +101,9 @@ export class HostNet {
       if (this.session) return this.send(from, 'reliable', { t: 'reject', reason: 'started' });
       const known = this.lobbyPlayers.find((p) => p.id === from);
       if (!known && this.lobbyPlayers.length >= CONFIG.maxPlayers) return this.send(from, 'reliable', { t: 'reject', reason: 'full' });
-      if (known) known.name = msg.name;
-      else this.lobbyPlayers.push({ id: from, name: msg.name });
+      // A second hello from a known player is a name change.
+      if (known) known.name = uniqueName(msg.name, this.lobbyPlayers, from);
+      else this.lobbyPlayers.push({ id: from, name: uniqueName(msg.name, this.lobbyPlayers, from) });
       this.send(from, 'reliable', { t: 'welcome', v: PROTOCOL_VERSION, id: from });
       this.publishLobby();
       return;

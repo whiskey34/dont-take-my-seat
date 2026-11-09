@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { CONFIG } from '../src/core/config';
 import { createGame, step } from '../src/core/game';
 import { ClientNet, type ClientSession, type CloseReason } from '../src/net/client';
-import { HostNet } from '../src/net/host';
+import { HostNet, uniqueName } from '../src/net/host';
 import { applySnapshot, packSnapshot, parseClientMsg, parseHostMsg } from '../src/net/protocol';
 import { HandlerSlot, type Channel, type Transport, type TransportHandlers } from '../src/net/transport';
 import { NO_INPUT } from '../src/core/types';
@@ -147,6 +147,19 @@ describe('host and clients', () => {
     for (let i = 0; i < 5; i++) hub.pump();
     expect(host.players).toHaveLength(CONFIG.maxPlayers);
     expect(reason).toBe('full');
+  });
+
+  it('renames players live and keeps names unique', () => {
+    const { hub, host, clients, lobbies } = setupRoom();
+    clients[0]!.net.rename('Player B'); // same as B: becomes "Player B 2"
+    hub.pump();
+    hub.pump();
+    expect(host.players.map((p) => p.name)).toEqual(['Host', 'Player B 2', 'Player B']);
+    host.rename('delfino');
+    hub.pump();
+    expect(lobbies.at(-1)).toEqual(['delfino', 'Player B 2', 'Player B']);
+    expect(uniqueName('  Andi  ', [{ id: 'x', name: 'andi' }], 'me')).toBe('Andi 2');
+    expect(uniqueName('Penumpang Kereta', [{ id: 'x', name: 'Penumpang Kere' }], 'me')).toBe('Penumpang Ke 2');
   });
 
   it('plays a full game; clients see the same result as the host, even with 30% fast-packet loss', () => {

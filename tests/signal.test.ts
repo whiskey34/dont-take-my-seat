@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { connectPacket, open, publishPacket, readPackets, readPublish, roomKeys, seal, subscribePacket } from '../src/net/signal/mqtt';
+import { open, roomKeys, seal } from '../src/net/signal/crypto';
+import { connectPacket, publishPacket, readPackets, readPublish, subscribePacket } from '../src/net/signal/mqtt';
 import { CODE_ALPHABET, newRoomCode, normalizeCode, parseSignal } from '../src/net/signal/signal';
 
 describe('room codes', () => {
