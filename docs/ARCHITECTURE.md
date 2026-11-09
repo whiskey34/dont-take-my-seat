@@ -36,12 +36,19 @@ RtcHost/JoinTransport          MessengerTransport
 
 ## Kode room (tanpa server sendiri)
 
-1. Host membuat kode 5 karakter. Topik MQTT dan kunci AES-GCM diturunkan dari kode itu, sehingga broker tidak bisa membaca isinya.
-2. Pemain mengirim `hello` ke topik tersebut. Host membalas dengan offer WebRTC (kandidat ICE dikumpulkan di awal), lalu pemain membalas answer.
-3. Setelah DataChannel terbuka, pemain berhenti memakai broker.
-4. Dua broker publik (EMQX dan HiveMQ) dipakai sekaligus. Kalau satu mati, yang lain tetap jalan. Kondisinya dicek otomatis di CI (job `brokers`).
+1. Host membuat kode 5 karakter. Topik dan kunci AES-GCM diturunkan dari kode itu, sehingga relay tidak bisa membaca isinya.
+2. Pemain mengirim `hello` ke topik tersebut berulang kali. Host membalas dengan offer WebRTC (kandidat ICE dikumpulkan di awal), lalu pemain membalas answer.
+3. Setelah DataChannel terbuka, pemain berhenti memakai relay.
 
-Keterbatasan: belum ada server TURN. Di sebagian jaringan seluler (CGNAT), koneksi langsung bisa gagal; Wi-Fi atau hotspot yang sama hampir selalu berhasil.
+**Relay yang dipakai bersamaan** (`src/net/signal/roomSignaling.ts`), semuanya dicek langsung di CI (job `brokers`):
+- MQTT: `broker.emqx.io:8084`, `broker.hivemq.com:8884`.
+- Nostr (port 443, untuk jaringan yang memblokir port MQTT): `relay.damus.io`, `relay.primal.net`, `relay.snort.social`, `offchain.pub`. Yang pernah dicoba tapi tidak meneruskan event: `nos.lol`, `nostr.mom`, `relay.nostr.band`.
+
+**Tahan putus** (`src/net/signal/relayLink.ts`): setiap koneksi relay menyambung ulang sendiri dengan jeda bertahap, dan langsung saat halaman tampil lagi atau internet kembali. Ini penting karena HP host biasanya memutus koneksi saat host pindah ke WhatsApp untuk membagikan kode. Lobby host menampilkan peringatan selama room tidak bisa dijangkau.
+
+**Alur bergabung** (`RtcJoinTransport`): tahap *mencari room* → *room ditemukan, menyambungkan* → (bila koneksi langsung gagal atau macet 15 detik) *mencoba lagi* dengan id baru. Batas total 60 detik, lalu pesan berbeda untuk "room tidak ditemukan" dan "room ditemukan tapi HP tidak bisa tersambung langsung".
+
+**Keterbatasan:** belum ada server TURN. Lima server TURN gratis tanpa pendaftaran (openrelay.metered.ca, freestun.net) diuji dari browser di CI (job `turn`) dan semuanya gagal. Jadi HP di jaringan yang sangat ketat (sebagian CGNAT seluler, Wi-Fi dengan isolasi klien) mungkin tidak bisa tersambung langsung. Solusinya TURN dengan akun gratis (Metered, Cloudflare Calls), yang belum dipasang.
 
 ## Alur satu ronde
 
