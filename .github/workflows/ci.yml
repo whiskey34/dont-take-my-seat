@@ -38,17 +38,16 @@ jobs:
       - run: npx vitest run tests/brokers.live.test.ts
         env:
           LIVE_BROKERS: '1'
-          # Candidate Nostr relays being evaluated (not used by the game yet).
-          EXTRA_NOSTR: wss://nostr.mom,wss://relay.nostr.band,wss://offchain.pub,wss://relay.snort.social
 
   # Checks free public TURN servers from a real browser. Informational.
   turn:
-    runs-on: ubuntu-latest
+    # Playwright's browsers do not support the newest runner image yet.
+    runs-on: ubuntu-24.04
     continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: npm i --no-save playwright@1.56.1 && npx playwright install chromium
+      - run: npm i --no-save playwright@1.56.1 && npx playwright install --with-deps chromium
       - run: node tests/live/turn-check.mjs

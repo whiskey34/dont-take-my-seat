@@ -10,7 +10,8 @@ import { RelayLink } from './relayLink';
  * room message, so relays learn nothing about the game.
  */
 // Verified by the live relay check in CI (tests/brokers.live.test.ts).
-export const NOSTR_RELAYS = ['wss://relay.damus.io', 'wss://nos.lol', 'wss://relay.primal.net'];
+export const NOSTR_RELAYS = ['wss://relay.damus.io', 'wss://relay.primal.net', 'wss://relay.snort.social', 'wss://offchain.pub'];
+// Tried and not forwarding ephemeral events: nos.lol, nostr.mom, relay.nostr.band.
 export const NOSTR_KIND = 21437; // ephemeral range 20000-29999
 
 const enc = new TextEncoder();
