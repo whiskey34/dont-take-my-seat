@@ -58,6 +58,14 @@ intro → riding (kereta jalan, goyang, lalu mengerem)
 - Challenge dipilih acak (RNG ber-seed) saat kereta berangkat dari setiap stasiun, jadi host dan replay selalu konsisten.
 - Snapshot multiplayer (protokol **v2**) membawa challenge, waktu rem, sisi pintu, posisi penumpang berdiri, power-up, serta status earphone dan pura-pura tidur tiap pemain. Pemain dengan versi game berbeda akan ditolak dengan pesan jelas.
 
+## Web app (PWA)
+
+- `vite-plugin-pwa` membuat `manifest.webmanifest` (layar penuh, landscape, ikon 192/512/maskable) dan `sw.js` (Workbox) yang menyimpan semua file game untuk offline, termasuk chat demo. Konfigurasinya di `vite.config.ts`.
+- `ignoreURLParametersMatching: [/.*/]` membuat tautan dengan parameter (`?embed=messenger`, `?room=`, `?signal=`) tetap terbuka dari cache.
+- `src/ui/pwa.ts` mendaftarkan service worker sendiri (tanpa `virtual:pwa-register`). Versi baru menunggu (`waiting`) dan hanya diaktifkan lewat pesan `SKIP_WAITING` saat game di menu utama tanpa koneksi multiplayer, lalu halaman di-reload sekali.
+- Di dalam iframe chat app (`?embed=messenger`) service worker tidak didaftarkan; caching diurus oleh chat app.
+- Ikon PNG di `public/` dibuat dari `public/icon.svg`. Kalau ikon diubah, render ulang ke `icon-192.png`, `icon-512.png`, `icon-maskable-512.png` (gambar di zona aman 80%), dan `apple-touch-icon.png` (180 px, latar penuh).
+
 ## Parameter URL untuk pengembangan
 
 | Parameter | Fungsi |

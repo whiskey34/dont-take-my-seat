@@ -2,7 +2,8 @@
 
 Mini game *musical chairs* di kereta komuter. Empat penumpang, kursi selalu kurang satu, dan yang tidak dapat kursi saat pintu tertutup akan gugur.
 
-- **Platform:** web (HTML5), dibungkus jadi APK Android dengan Capacitor, dan nantinya dimuat di dalam messenger P2P sebagai mini game.
+- **Platform:** web app (PWA). Dimainkan langsung di browser, bisa dipasang ke layar utama HP, dan bisa dimuat di dalam chat app sebagai mini game.
+- **Main:** https://whiskey34.github.io/dont-take-my-seat/
 - **Teknologi:** TypeScript, Three.js (semi 3D low-poly), Vite, Vitest.
 - **Bahasa:** English dan Indonesia (otomatis mengikuti bahasa perangkat).
 
@@ -30,14 +31,16 @@ Detail teknis ada di [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
   - 💤 **Pura-pura tidur:** sekali duduk di kursi prioritas tanpa disuruh berdiri.
 - Sensitivitas stik, nama, bahasa, dan suara bisa diatur di **Pengaturan** (juga dari menu jeda).
 
-## Hasil build otomatis
+## Memasang di HP
 
-| Apa | Di mana |
-|---|---|
-| Versi web (untuk messenger & PWA) | GitHub Pages repo ini |
-| APK Android | Release **apk-latest** di halaman Releases |
+- **Android (Chrome):** buka alamat game, lalu tekan **Pasang aplikasi** di menu (atau menu ⋮ → *Instal aplikasi*). Game muncul di layar utama dan terbuka layar penuh, landscape.
+- **iPhone (Safari):** ketuk **Bagikan**, lalu **Tambahkan ke Layar Utama**. Safari tidak bisa mengunci orientasi, jadi miringkan HP sendiri.
 
-Keduanya dibuat ulang otomatis setiap ada perubahan di branch `main`. Tidak perlu meng-compile apa pun di perangkat sendiri.
+Setelah dibuka sekali, mode **lawan bot bisa dimainkan tanpa internet**. Mode room tetap butuh internet untuk mencari pemain.
+
+## Update
+
+Setiap perubahan di branch `main` otomatis dicek, di-build, lalu diterbitkan ke GitHub Pages. Tidak perlu meng-compile apa pun atau memasang ulang. Versi baru diunduh di latar belakang dan diterapkan saat pemain kembali ke menu, tidak pernah di tengah permainan.
 
 ## Pengembangan
 
@@ -63,7 +66,6 @@ src/
   audio/    efek suara sintetis (tanpa file audio)
 tests/      tes logika game, termasuk simulasi ratusan game antar bot
 messenger-sdk/  modul untuk chat app: iframe game, kanal game di WebRTC, undangan, chat demo
-scripts/    penyesuaian proyek Android (landscape, layar penuh)
 docs/       arsitektur & rencana multiplayer
 ```
 

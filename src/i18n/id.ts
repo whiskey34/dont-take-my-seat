@@ -99,4 +99,6 @@ export const id: Strings = {
   gotSleep: '💤 Pura-pura tidur! Aman di kursi prioritas sekali',
   shieldBlocked: '🎧 Dorongan ditahan!',
   sleptSafe: '💤 Zzz… tidak ada yang menyuruhmu berdiri',
+  installApp: '⬇ Pasang aplikasi',
+  installIos: 'Pasang di iPhone: ketuk Bagikan, lalu “Tambahkan ke Layar Utama”.',
 };

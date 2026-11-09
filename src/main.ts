@@ -18,6 +18,7 @@ import { PLAYER_COLORS } from './render/palette';
 import { TrainScene } from './render/scene';
 import { LocalSession, type GameSession } from './session/session';
 import { Hud } from './ui/hud';
+import { applyPendingUpdate, canInstall, initPwa, install, needsIosHint } from './ui/pwa';
 import { loadSettings, saveSettings } from './ui/settings';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -71,6 +72,9 @@ class App {
     });
     this.startDemo();
     requestAnimationFrame(this.frame);
+    // Updates reload the page, so only apply them while sitting in the main menu.
+    initPwa({ isSafeToReload: () => this.mode === 'menu' && !this.net, onInstallChange: () => this.syncInstall() });
+    this.syncInstall();
     installMockMessenger(params);
     if (findBridge()) void this.openFromMessenger();
   }
@@ -364,6 +368,13 @@ class App {
     this.hud.show(false);
     this.show('menu');
     this.startDemo();
+    applyPendingUpdate();
+  }
+
+  private syncInstall(): void {
+    const embedded = params.get('embed') === 'messenger';
+    $('btnInstall').hidden = embedded || !canInstall();
+    $('iosInstallHint').hidden = embedded || !needsIosHint();
   }
 
   private showGameOver(): void {
@@ -457,6 +468,7 @@ class App {
         })
         .catch(() => {});
     });
+    on('btnInstall', () => void install());
     on('btnHowTo', () => this.show('howto'));
     on('btnHowToClose', () => this.show('menu'));
     on('btnSettings', () => this.show('settingsScreen'));

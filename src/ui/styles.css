@@ -782,3 +782,13 @@ input:focus-visible {
 #overWait {
   margin: 0;
 }
+
+.btn.install {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.install-hint {
+  margin: 0;
+  font-size: 12px;
+}

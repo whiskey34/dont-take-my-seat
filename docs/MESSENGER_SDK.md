@@ -29,7 +29,7 @@ Versi SDK: **1**
 | Mode | URL |
 |---|---|
 | Online (disarankan untuk uji coba) | `https://whiskey34.github.io/dont-take-my-seat/` |
-| Bundel di dalam aplikasi | Salin isi `dist/` (hasil `npm run build`) ke aset aplikasi, lalu muat lewat `WebViewAssetLoader` (Android) atau skema lokal yang aman |
+| Bundel di dalam aplikasi | Salin isi `dist/` (hasil `npm run build`) ke aset aplikasi, lalu muat lewat `WebViewAssetLoader` (Android) atau skema lokal yang aman. Saat dimuat dengan `?embed=messenger`, game tidak mendaftarkan service worker sendiri. |
 
 Pengaturan WebView:
 - JavaScript aktif, DOM storage aktif, audio boleh diputar tanpa gesture.

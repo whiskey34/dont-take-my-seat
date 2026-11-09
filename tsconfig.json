@@ -15,5 +15,5 @@
     "noEmit": true,
     "types": ["vite/client"]
   },
-  "include": ["src", "tests", "messenger-sdk", "vite.config.ts", "capacitor.config.ts"]
+  "include": ["src", "tests", "messenger-sdk", "vite.config.ts"]
 }

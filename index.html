@@ -6,8 +6,11 @@
     <meta name="theme-color" content="#17232f" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
-    <link rel="manifest" href="./manifest.webmanifest" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="My Seat" />
+    <meta name="description" content="Musical chairs on the commuter train. Rebutan kursi di kereta komuter." />
     <link rel="icon" href="./icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
     <title>Don't Take My Seat</title>
   </head>
   <body>
@@ -50,6 +53,8 @@
             <button class="btn subtle" id="btnHowTo" data-t="howTo"></button>
             <button class="btn subtle" id="btnSettings" data-t="settings"></button>
           </div>
+          <button class="btn subtle install" id="btnInstall" data-t="installApp" hidden></button>
+          <p class="tagline install-hint" id="iosInstallHint" data-t="installIos" hidden></p>
         </div>
       </section>
 

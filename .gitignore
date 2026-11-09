@@ -1,8 +1,4 @@
 node_modules/
 dist/
-android/
-ios/
-*.keystore
-*.jks
 .DS_Store
 coverage/

@@ -97,6 +97,8 @@ export const en = {
   gotSleep: '💤 Pretend to sleep! Keep a priority seat once',
   shieldBlocked: '🎧 Push blocked!',
   sleptSafe: '💤 Zzz… nobody asks you to stand',
+  installApp: '⬇ Install app',
+  installIos: 'To install on iPhone: tap Share, then “Add to Home Screen”.',
 };
 
 export type Strings = typeof en;
