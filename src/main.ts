@@ -166,6 +166,11 @@ class App {
     this.startScores = new Map(s.view().players.map((p) => [p.id, p.score]));
     unlockAudio();
     void enterLandscapeFullscreen();
+    // Players who joined typed into the code/name fields, and those fields are
+    // now hidden. Safari keeps keyboard focus on a hidden field, so the arrow
+    // keys never reached the game. Move focus to the game itself.
+    (document.activeElement as HTMLElement | null)?.blur?.();
+    $('scene').focus({ preventScroll: true });
     this.setSession(s);
     this.mode = 'playing';
     this.show(null);

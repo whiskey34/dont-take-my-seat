@@ -171,6 +171,8 @@ export class ClientSession implements GameSession {
   private seq = 0;
   private lastSent = { x: 0, z: 0, at: -1 };
   private moveSeq = -1;
+  private maxInput = 0; // strongest stick input in the last few seconds (debug)
+  private maxInputAt = 0;
   private history: Frame[] = [];
   private reconciledAt = -1; // host time of the snapshot we last reconciled with
   /** Visual-only offset that hides small corrections; fades out quickly. */
@@ -207,7 +209,8 @@ export class ClientSession implements GameSession {
       input: f ? `${f.input.moveX.toFixed(2)}, ${f.input.moveZ.toFixed(2)}` : '-',
       stunned: me && this.hostNow() < me.stunnedUntil ? 'yes' : 'no',
       phase: `${this.state.phase}${me && me.seatId !== null ? ' (seated)' : ''}${me?.eliminated ? ' (out)' : ''}`,
-      pos: `${this.me.pos.x.toFixed(2)}, ${this.me.pos.z.toFixed(2)}`,
+      pos: `${this.me.pos.x.toFixed(2)}, ${this.me.pos.z.toFixed(2)} (host ${me ? `${me.pos.x.toFixed(2)}, ${me.pos.z.toFixed(2)}` : '-'})`,
+      maxInput5s: this.maxInput.toFixed(2),
     };
   }
 
@@ -248,6 +251,11 @@ export class ClientSession implements GameSession {
   }
 
   private sendInput(input: PlayerInput): void {
+    const mag = Math.hypot(input.moveX, input.moveZ);
+    if (mag >= this.maxInput || this.clock - this.maxInputAt > 5) {
+      this.maxInput = mag;
+      this.maxInputAt = this.clock;
+    }
     if (input.action) this.sendMsg({ t: 'act', s: ++this.seq });
     const changed = Math.abs(input.moveX - this.lastSent.x) > 0.05 || Math.abs(input.moveZ - this.lastSent.z) > 0.05;
     if (changed || this.clock - this.lastSent.at >= INPUT_INTERVAL) {

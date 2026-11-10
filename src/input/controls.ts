@@ -13,6 +13,8 @@ export class Controls {
   private radius = 56;
   private dead = 0.12;
   private curve = 1;
+  /** Event counts for the ?debug panel. */
+  private seen = { down: 0, up: 0, blur: 0, ptr: 0, last: '' };
 
   constructor(
     private readonly zone: HTMLElement,
@@ -33,16 +35,25 @@ export class Controls {
     const release = () => actionButton.classList.remove('pressed');
     actionButton.addEventListener('pointerup', release);
     actionButton.addEventListener('pointerleave', release);
+    // Capture phase: nothing on the page can swallow the keys before we see them.
     window.addEventListener('keydown', (e) => {
+      this.seen.down++;
+      this.seen.last = `${e.code || e.key}${e.repeat ? ' (repeat)' : ''} → ${(document.activeElement as HTMLElement | null)?.id || document.activeElement?.tagName || '-'}`;
       if (e.repeat) return;
       if (e.code === 'Space' || e.code === 'KeyJ' || e.code === 'Enter') {
         this.actionQueued = true;
         e.preventDefault();
       }
       this.keys.add(e.code);
+    }, true);
+    window.addEventListener('keyup', (e) => {
+      this.seen.up++;
+      this.keys.delete(e.code);
+    }, true);
+    window.addEventListener('blur', () => {
+      this.seen.blur++;
+      this.reset();
     });
-    window.addEventListener('keyup', (e) => this.keys.delete(e.code));
-    window.addEventListener('blur', () => this.reset());
   }
 
   /**
@@ -74,7 +85,8 @@ export class Controls {
   /** Current stick/keys state without consuming anything (debug panel). */
   peek(): string {
     const touch = this.stickPointer === null ? 'no touch' : `touch #${this.stickPointer}`;
-    return `${this.stick.x.toFixed(2)}, ${this.stick.y.toFixed(2)} · ${touch} · keys [${[...this.keys].join(' ')}]`;
+    const n = this.seen;
+    return `${this.stick.x.toFixed(2)}, ${this.stick.y.toFixed(2)} · ${touch} · keys [${[...this.keys].join(' ')}]\nevents down ${n.down} up ${n.up} blur ${n.blur} stick ${n.ptr} · last ${n.last}`;
   }
 
   reset(): void {
@@ -86,6 +98,7 @@ export class Controls {
   }
 
   private onDown = (e: PointerEvent) => {
+    this.seen.ptr++;
     // A new touch always takes the stick. If the browser lost the old finger's
     // "up" event (iOS does this), the stick would otherwise stay stuck.
     e.preventDefault();

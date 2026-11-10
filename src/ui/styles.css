@@ -946,3 +946,7 @@ input:focus-visible {
   white-space: pre;
   pointer-events: none;
 }
+
+#scene:focus {
+  outline: none;
+}
