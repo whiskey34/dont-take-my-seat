@@ -70,11 +70,16 @@ async function settle(ms = 50): Promise<void> {
   }
 }
 
+/** Real time, for WebCrypto (not driven by fake timers), which can be slow on CI. */
+const realSetTimeout = globalThis.setTimeout;
+const realWait = (ms: number) => new Promise((r) => realSetTimeout(r, ms));
+
 /** Waits (real turns + small fake steps) until a condition holds. */
 async function until(cond: () => boolean): Promise<void> {
   for (let i = 0; i < 3000; i++) {
     if (cond()) return;
     await new Promise((r) => setImmediate(r));
+    if (i % 25 === 24) await realWait(2);
     await vi.advanceTimersByTimeAsync(2);
   }
   throw new Error('condition not met');
