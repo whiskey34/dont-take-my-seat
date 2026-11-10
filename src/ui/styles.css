@@ -930,3 +930,19 @@ input:focus-visible {
     transform: rotate(360deg);
   }
 }
+
+/* ?debug */
+#debugPanel {
+  position: fixed;
+  right: calc(8px + var(--safe-r));
+  top: calc(60px + var(--safe-t));
+  z-index: 30;
+  margin: 0;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.72);
+  color: #b8ffb8;
+  font: 10px/1.35 ui-monospace, Menlo, monospace;
+  white-space: pre;
+  pointer-events: none;
+}

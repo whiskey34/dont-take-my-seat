@@ -21,6 +21,8 @@ export interface Transport {
   send(to: string, channel: Channel, data: string): void;
   setHandlers(h: TransportHandlers): void;
   close(): void;
+  /** How the connection to a peer travels (for the debug panel), if known. */
+  route?(peer: string): Promise<string>;
 }
 
 /** Holds handlers until the session attaches; buffers early events. */

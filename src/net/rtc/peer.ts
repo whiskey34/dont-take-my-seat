@@ -84,6 +84,25 @@ export class Peer {
     }
   }
 
+  /** "direct UDP 35 ms", "TURN TCP 80 ms", … from the selected ICE candidate pair. */
+  async route(): Promise<string> {
+    try {
+      const stats = await this.pc.getStats();
+      type Pair = { type: string; state?: string; nominated?: boolean; selected?: boolean; localCandidateId?: string; currentRoundTripTime?: number };
+      let pair: Pair | undefined;
+      stats.forEach((r: Pair) => {
+        if (r.type === 'candidate-pair' && r.state === 'succeeded' && (r.nominated || r.selected)) pair ??= r;
+      });
+      if (!pair?.localCandidateId) return this.pc.connectionState;
+      const local = stats.get(pair.localCandidateId) as { candidateType?: string; protocol?: string; relayProtocol?: string } | undefined;
+      const kind = local?.candidateType === 'relay' ? `TURN ${(local.relayProtocol ?? local.protocol ?? '').toUpperCase()}` : `direct ${(local?.protocol ?? '').toUpperCase()}`;
+      const rtt = pair.currentRoundTripTime === undefined ? '' : ` ${Math.round(pair.currentRoundTripTime * 1000)} ms`;
+      return kind + rtt;
+    } catch {
+      return '?';
+    }
+  }
+
   close(): void {
     if (this.closed) return;
     this.closed = true;

@@ -136,6 +136,10 @@ export class RtcJoinTransport implements Transport {
     this.slot.set(h);
   }
 
+  route(): Promise<string> {
+    return this.peer?.route() ?? Promise.resolve('none');
+  }
+
   close(): void {
     if (this.closed) return;
     this.closed = true;

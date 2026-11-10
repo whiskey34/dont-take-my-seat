@@ -74,6 +74,11 @@ export class ClientNet {
     return this.myId;
   }
 
+  /** Connection route to the host, for the debug panel. */
+  route(): Promise<string> {
+    return this.hostId && this.transport.route ? this.transport.route(this.hostId) : Promise.resolve('?');
+  }
+
   /** Changes our name in the lobby (the host treats a repeated hello as a rename). */
   rename(name: string): void {
     this.name = name;
@@ -189,6 +194,21 @@ export class ClientSession implements GameSession {
   /** True once the host's state has arrived (before that the view is only the opening layout). */
   get hasSnapshot(): boolean {
     return this.snaps.length > 0;
+  }
+
+  /** Numbers for the debug panel. */
+  debug(): Record<string, string> {
+    const latest = this.snaps[this.snaps.length - 1];
+    const me = this.state.players.find((p) => p.id === this.humanId);
+    const f = this.history[this.history.length - 1];
+    return {
+      snapAge: latest ? `${Math.round((this.clock - latest.at) * 1000)} ms` : '-',
+      unacked: `${this.history.length} frames`,
+      input: f ? `${f.input.moveX.toFixed(2)}, ${f.input.moveZ.toFixed(2)}` : '-',
+      stunned: me && this.hostNow() < me.stunnedUntil ? 'yes' : 'no',
+      phase: `${this.state.phase}${me && me.seatId !== null ? ' (seated)' : ''}${me?.eliminated ? ' (out)' : ''}`,
+      pos: `${this.me.pos.x.toFixed(2)}, ${this.me.pos.z.toFixed(2)}`,
+    };
   }
 
   /** Nothing from the host for a moment: the game on screen is not moving on (weak signal). */

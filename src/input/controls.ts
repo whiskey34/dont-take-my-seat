@@ -71,6 +71,12 @@ export class Controls {
     return { moveX: clamp(x), moveZ: clamp(y), action };
   }
 
+  /** Current stick/keys state without consuming anything (debug panel). */
+  peek(): string {
+    const touch = this.stickPointer === null ? 'no touch' : `touch #${this.stickPointer}`;
+    return `${this.stick.x.toFixed(2)}, ${this.stick.y.toFixed(2)} · ${touch} · keys [${[...this.keys].join(' ')}]`;
+  }
+
   reset(): void {
     this.stick = { x: 0, y: 0 };
     this.stickPointer = null;

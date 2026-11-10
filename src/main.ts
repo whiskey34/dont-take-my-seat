@@ -70,6 +70,11 @@ class App {
   private seed = (Date.now() & 0x7fffffff) | 1;
 
   constructor() {
+    // ?debug: a live panel with connection and control numbers, and the app in the console.
+    if (params.has('debug')) {
+      (window as unknown as { __app: unknown }).__app = this;
+      this.startDebugPanel();
+    }
     setLang(this.settings.lang ?? detectLang(navigator.languages ?? [navigator.language]));
     setSoundEnabled(this.settings.sound);
     this.controls.setSensitivity(this.settings.sensitivity);
@@ -166,6 +171,32 @@ class App {
     this.show(null);
     this.hud.show(true);
     this.last = performance.now();
+  }
+
+  private startDebugPanel(): void {
+    const panel = document.createElement('pre');
+    panel.id = 'debugPanel';
+    document.body.append(panel);
+    let frames = 0;
+    let route = '?';
+    const count = () => {
+      frames++;
+      requestAnimationFrame(count);
+    };
+    requestAnimationFrame(count);
+    window.setInterval(() => {
+      if (this.net?.kind === 'client') void this.net.client.route().then((r) => (route = r));
+    }, 1000);
+    window.setInterval(() => {
+      const s = this.session;
+      const lines = [`v${__APP_VERSION__} · ${s.kind} · mode ${this.mode} · ${frames * 2} fps`, `stick ${this.controls.peek()}`];
+      frames = 0;
+      if (s instanceof ClientSession) {
+        lines.push(`route ${route}${this.reconnecting ? ' · reconnecting' : ''}`);
+        for (const [k, v] of Object.entries(s.debug())) lines.push(`${k} ${v}`);
+      }
+      panel.textContent = lines.join('\n');
+    }, 500);
   }
 
   /**
