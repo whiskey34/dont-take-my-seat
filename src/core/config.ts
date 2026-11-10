@@ -73,6 +73,18 @@ export const CONFIG = {
   powerUp: {
     pickRange: 0.6,
     shieldTime: 4,
+    boostTime: 5, // iced coffee
+    boostSpeed: 1.4, // times normal speed
+  },
+
+  /**
+   * Seats get scarcer toward the end of the line: the first stops have a seat
+   * for everyone (warm-up), then one too few, later two too few, and the last
+   * station of the journey has a single seat (the final).
+   */
+  seats: {
+    everyoneUntilStop: 2, // stops 1-2: a seat for every player
+    tighterFromStop: 5, // from stop 5: two seats too few
   },
 } as const;
 

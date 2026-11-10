@@ -1,7 +1,7 @@
 import { CHALLENGE_KINDS, POWER_UP_KINDS, type ChallengeKind, type GameEvent, type GameState, type Phase, type Player, type PlayerSetup, type PowerUpKind, type Seat } from '../core/types';
 
 /** Bump when messages change incompatibly; peers with another version are refused. */
-export const PROTOCOL_VERSION = 5;
+export const PROTOCOL_VERSION = 6;
 export const MAX_NAME = 14;
 
 export interface LobbyPlayer {
@@ -41,8 +41,8 @@ export interface Snapshot {
   free: number[];
   trap: number;
   winner: string;
-  /** [id, x, z, vx, vz, facing, seat, eliminated, elimRound, stunnedUntil, pushReadyAt, kickAt, shieldUntil, sleeping, score] */
-  p: Array<[string, number, number, number, number, number, number, 0 | 1, number, number, number, number, number, 0 | 1, number]>;
+  /** [id, x, z, vx, vz, facing, seat, eliminated, elimRound, stunnedUntil, pushReadyAt, kickAt, shieldUntil, sleeping, score, boostUntil] */
+  p: Array<[string, number, number, number, number, number, number, 0 | 1, number, number, number, number, number, 0 | 1, number, number]>;
   /** Puddles [x, z, r] (wet floor challenge). */
   pd: Array<[number, number, number]>;
   /** Challenge of this stop ('' none), sudden-brake end time, open door side. */
@@ -92,6 +92,7 @@ export function packSnapshot(s: GameState, offline: Iterable<string> = [], acks:
       r3(p.shieldUntil),
       p.sleeping ? 1 : 0,
       p.score,
+      r3(p.boostUntil),
     ]),
     pd: s.puddles.map((d) => [r3(d.x), r3(d.z), r3(d.r)]),
     ch: s.challenge ?? '',
@@ -149,6 +150,7 @@ export function applyPlayerRow(p: Player, row: Snapshot['p'][number]): void {
   p.shieldUntil = row[12];
   p.sleeping = row[13] === 1;
   p.score = row[14];
+  p.boostUntil = row[15];
 }
 
 // --------------------------------------------------------------- validation
@@ -240,7 +242,7 @@ function isSnapshot(v: unknown): v is Snapshot {
   if (!Array.isArray(v.free) || !v.free.every(isInt) || !isInt(v.trap) || !isStr(v.winner)) return false;
   if (typeof v.npc !== 'string' || v.npc.length > 200 || !Array.isArray(v.occ) || !Array.isArray(v.p) || v.p.length > 4) return false;
   if (!v.occ.every((o) => Array.isArray(o) && o.length === 2 && isInt(o[0]) && isStr(o[1]))) return false;
-  if (!v.p.every((row) => Array.isArray(row) && row.length === 15 && isStr(row[0]) && row.slice(1).every(isNum))) return false;
+  if (!v.p.every((row) => Array.isArray(row) && row.length === 16 && isStr(row[0]) && row.slice(1).every(isNum))) return false;
   if (v.ch !== '' && !CHALLENGE_KINDS.includes(v.ch as ChallengeKind)) return false;
   if (!isNum(v.bk) || (v.ds !== -1 && v.ds !== 0 && v.ds !== 1)) return false;
   if (!Array.isArray(v.st) || v.st.length > 12 || !v.st.every((r) => Array.isArray(r) && r.length === 3 && r.every(isNum))) return false;

@@ -30,6 +30,7 @@ export function createGame(setups: readonly PlayerSetup[], seed: number): GameSt
     kickAt: null,
     shieldUntil: 0,
     sleeping: false,
+    boostUntil: 0,
     score: Math.max(0, Math.floor(s.score ?? 0)),
   }));
   const [route, rngAfterRoute] = pickRoute(seed | 0);
@@ -187,6 +188,7 @@ function startRound(s: GameState, events: GameEvent[]): void {
     p.vel = { x: 0, z: 0 };
     p.stunnedUntil = 0;
     p.shieldUntil = 0;
+    p.boostUntil = 0;
   }
   placeStandingPlayers(s);
   startChallenge(s, events);
@@ -207,8 +209,22 @@ function placeStandingPlayers(s: GameState): void {
   s.rngState = rng;
 }
 
+/** True at the last station of this game's journey (a single seat). */
+export function isFinalStop(s: GameState): boolean {
+  return s.round + 2 >= s.route.length;
+}
+
+/** How many ordinary seats open at this stop (see CONFIG.seats). */
+export function seatsThisStop(s: GameState): number {
+  const alive = alivePlayers(s).length;
+  if (isFinalStop(s)) return 1;
+  const stop = s.round + 1;
+  const short = stop <= CONFIG.seats.everyoneUntilStop ? 0 : stop < CONFIG.seats.tighterFromStop ? 1 : 2;
+  return Math.max(1, Math.min(alive, alive - short));
+}
+
 function openDoors(s: GameState, events: GameEvent[]): void {
-  const needed = alivePlayers(s).length - 1;
+  const needed = seatsThisStop(s);
   const normal = s.seats.filter((seat) => !seat.priority).map((seat) => seat.id);
   const priority = s.seats.filter((seat) => seat.priority).map((seat) => seat.id);
   const [free, r1] = pickDistinct(normal, needed, s.rngState);
@@ -407,8 +423,9 @@ export function move(s: GameState, p: Player, input: PlayerInput, dt: number): v
     grip = speedUp ? P.responsiveness * 0.5 : CONFIG.challenge.puddleGrip;
   }
   const k = 1 - Math.exp(-grip * dt);
-  p.vel.x += (mx * P.speed - p.vel.x) * k;
-  p.vel.z += (mz * P.speed - p.vel.z) * k;
+  const speed = s.time < p.boostUntil ? P.speed * CONFIG.powerUp.boostSpeed : P.speed;
+  p.vel.x += (mx * speed - p.vel.x) * k;
+  p.vel.z += (mz * speed - p.vel.z) * k;
   const a = trainAccel(s);
   p.vel.x += a.x * dt;
   p.vel.z += a.z * dt;

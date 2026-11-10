@@ -230,17 +230,42 @@ export class TrainScene {
         g.add(cup);
       }
       g.add(band);
+    } else if (kind === 'coffee') {
+      // Iced coffee in a clear plastic cup: milky coffee, a dark layer at the
+      // bottom and ice cubes floating on top.
+      const h = 0.3;
+      const cup = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.12, 0.09, h, 18, 1, true),
+        new THREE.MeshLambertMaterial({ color: '#ffffff', transparent: true, opacity: 0.35, side: THREE.DoubleSide, depthWrite: false }),
+      );
+      cup.position.y = h / 2;
+      const rim = new THREE.Mesh(new THREE.TorusGeometry(0.12, 0.008, 6, 24), new THREE.MeshBasicMaterial({ color: '#ffffff' }));
+      rim.rotation.x = Math.PI / 2;
+      rim.position.y = h;
+      const dark = new THREE.Mesh(new THREE.CylinderGeometry(0.093, 0.088, 0.05, 18), mat(SCENE.coffeeDark));
+      dark.position.y = 0.028;
+      const milk = new THREE.Mesh(new THREE.CylinderGeometry(0.113, 0.094, 0.2, 18), mat(SCENE.coffee));
+      milk.position.y = 0.153;
+      g.add(dark, milk);
+      const iceMat = new THREE.MeshLambertMaterial({ color: SCENE.ice, transparent: true, opacity: 0.85, flatShading: true });
+      [[-0.04, 0.03, 0.3], [0.045, -0.02, -0.4], [0.0, -0.05, 0.9]].forEach(([x, z, r]) => {
+        const cube = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.05, 0.06), iceMat);
+        cube.position.set(x!, 0.255, z!);
+        cube.rotation.set(r!, r! * 2, r! * 0.5);
+        g.add(cube);
+      });
+      g.add(cup, rim);
     } else {
       const pillow = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.12, 0.26), mat(SCENE.pillow));
       const moon = new THREE.Mesh(new THREE.IcosahedronGeometry(0.07, 1), mat('#fde68a'));
       moon.position.set(0.12, 0.16, 0);
       g.add(pillow, moon);
     }
-    const glow = new THREE.Mesh(new THREE.RingGeometry(0.22, 0.32, 24), new THREE.MeshBasicMaterial({ color: kind === 'earphones' ? SCENE.earphones : SCENE.pillow, transparent: true, opacity: 0.6, depthWrite: false }));
+    const glow = new THREE.Mesh(new THREE.RingGeometry(0.22, 0.32, 24), new THREE.MeshBasicMaterial({ color: kind === 'earphones' ? SCENE.earphones : kind === 'coffee' ? SCENE.coffee : SCENE.pillow, transparent: true, opacity: 0.6, depthWrite: false }));
     glow.rotation.x = -Math.PI / 2;
     glow.userData.floor = true;
     g.add(glow);
-    g.scale.setScalar(1.8);
+    g.scale.setScalar(kind === 'coffee' ? 2.2 : 1.8);
     return g;
   }
 

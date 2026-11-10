@@ -1,5 +1,5 @@
 import { CONFIG } from '../core/config';
-import { pushTarget, seatInReach, seatKickTarget, trainAccel } from '../core/game';
+import { isFinalStop, pushTarget, seatInReach, seatKickTarget, trainAccel } from '../core/game';
 import type { GameEvent, GameState, Player } from '../core/types';
 import { t } from '../i18n';
 import { PLAYER_COLORS } from '../render/palette';
@@ -101,7 +101,7 @@ export class Hud {
           this.flash(t('brakeNow'), 'bad', 1200);
           break;
         case 'powerUp':
-          if (e.playerId === me) this.flash(e.kind === 'earphones' ? t('gotEarphones') : t('gotSleep'), 'good', 1800);
+          if (e.playerId === me) this.flash(e.kind === 'earphones' ? t('gotEarphones') : e.kind === 'coffee' ? t('gotCoffee') : t('gotSleep'), 'good', 1800);
           break;
         case 'shielded':
           if (e.playerId === me) this.flash(t('shieldBlocked'), 'good', 1000);
@@ -195,7 +195,7 @@ export class Hud {
 
   /** Name plus icons for active power-ups. */
   private tagText(p: Player, time: number): string {
-    const icons = (time < p.shieldUntil ? ' 🎧' : '') + (p.sleeping ? ' 💤' : '');
+    const icons = (time < p.shieldUntil ? ' 🎧' : '') + (time < p.boostUntil ? ' 🧋' : '') + (p.sleeping ? ' 💤' : '');
     return this.displayName(p) + icons;
   }
 
@@ -219,6 +219,7 @@ export class Hud {
 
 /** The current stop's challenge, as shown on the station board. */
 export function challengeText(state: GameState): string {
+  if (isFinalStop(state)) return t('finalStop');
   switch (state.challenge) {
     case 'suddenBrake':
       return t('chBrake');

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { botThink, createBrain } from '../src/ai/bot';
 import { BOGOR_LINE, CONFIG, NAMBO_BRANCH, ROUTE_LENGTH, STATIONS } from '../src/core/config';
-import { alivePlayers, createGame, pickRoute, step } from '../src/core/game';
+import { alivePlayers, createGame, isFinalStop, pickRoute, seatsThisStop, step } from '../src/core/game';
 import { createSeats, seatFront } from '../src/core/layout';
 import type { GameEvent, GameState, PlayerInput, PlayerSetup } from '../src/core/types';
 
@@ -45,10 +45,10 @@ describe('createGame', () => {
 });
 
 describe('a round', () => {
-  it('opens exactly alive-1 normal seats plus one priority trap', () => {
+  it('first stop: a normal seat for everyone, plus one priority trap', () => {
     const s = createGame(four, 7);
     runUntil(s, 'scramble');
-    expect(s.freeSeatIds).toHaveLength(3);
+    expect(s.freeSeatIds).toHaveLength(4);
     expect(s.freeSeatIds.every((id) => !s.seats[id]!.priority && !s.seats[id]!.npc)).toBe(true);
     expect(s.trapSeatId).not.toBeNull();
     expect(s.seats[s.trapSeatId!]!.priority).toBe(true);
@@ -143,6 +143,37 @@ describe('full bot games', () => {
       }
       expect(alivePlayers(s)).toHaveLength(1);
       expect(s.winnerId).toBe(alivePlayers(s)[0]!.id);
+    }
+  });
+});
+
+describe('seats get scarcer toward the end of the line', () => {
+  it('everyone, then one too few, then two too few, and one seat at the last station', () => {
+    const s = createGame(four, 3);
+    const at = (round: number, alive: number) => {
+      s.round = round;
+      s.players.forEach((p, i) => (p.eliminated = i >= alive));
+      return seatsThisStop(s);
+    };
+    expect([at(0, 4), at(1, 4)]).toEqual([4, 4]); // stops 1-2
+    expect([at(2, 4), at(3, 3)]).toEqual([3, 2]); // stops 3-4
+    expect([at(4, 4), at(5, 3), at(5, 2)]).toEqual([2, 1, 1]); // stop 5+: never below 1
+    expect(isFinalStop({ ...s, round: s.route.length - 2 })).toBe(true);
+    expect(at(s.route.length - 2, 4)).toBe(1); // last station: the final
+  });
+
+  it('a game always ends by the last station', () => {
+    for (let seed = 1; seed <= 30; seed++) {
+      const g = createGame(four, seed);
+      const brains = new Map(g.players.map((p, i) => [p.id, createBrain(seed * 5 + i)]));
+      const stations = new Set<string>();
+      for (let i = 0; i < 60 * 900 && g.phase !== 'gameOver'; i++) {
+        step(g, new Map(g.players.map((p) => [p.id, botThink(g, p, brains.get(p.id)!, 1 / 60)])), 1 / 60);
+        stations.add(g.station);
+      }
+      expect(g.phase).toBe('gameOver');
+      expect(g.winnerId).not.toBeNull();
+      expect(stations.size).toBeLessThanOrEqual(ROUTE_LENGTH);
     }
   });
 });

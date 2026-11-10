@@ -93,6 +93,7 @@ export function collectPowerUps(s: GameState, events: GameEvent[]): void {
     const [u] = s.powerUps.splice(i, 1);
     if (!u) continue;
     if (u.kind === 'earphones') p.shieldUntil = s.time + PU.shieldTime;
+    else if (u.kind === 'coffee') p.boostUntil = s.time + PU.boostTime;
     else p.sleeping = true;
     events.push({ type: 'powerUp', playerId: p.id, kind: u.kind });
   }

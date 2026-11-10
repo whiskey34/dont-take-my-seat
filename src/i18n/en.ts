@@ -13,13 +13,13 @@ export const en = {
   close: 'Close',
   rules: [
     'Ride the train with 3 other passengers.',
-    'At every station a few passengers get off. There is always one seat too few.',
+    'At every station a few passengers get off. The first stops have a seat for everyone; then seats get scarcer, and the last station has just one.',
     'Move with the stick, tap SIT next to a glowing seat.',
     'No seat when the doors close? You are out.',
     'Tap PUSH to shove a rival out of your way.',
     'Red seats are priority seats. Sit there and you will be asked to stand.',
     'Every station has a challenge: a sudden brake (keep moving), standing passengers in the way, doors on one side only, a kick fight (KICK someone off their seat) or a wet floor (you slide).',
-    'Grab the item on the floor: 🎧 earphones block pushes, 💤 pretending to sleep keeps a priority seat once.',
+    'Grab the item on the floor: 🎧 earphones block pushes, 💤 pretending to sleep keeps a priority seat once, 🧋 iced coffee makes you run faster.',
     'Last passenger seated wins. Points: +10 for every station you keep a seat, +5 per kick, +50 for the win. Points add up game after game.',
   ],
   you: 'You',
@@ -120,6 +120,8 @@ export const en = {
   reconnecting: 'Weak signal, reconnecting…',
   weakSignal: 'Weak signal…',
   pingMs: 'Ping {n} ms',
+  gotCoffee: '🧋 Iced coffee! Run faster for 5 seconds',
+  finalStop: '🏁 Last station: only 1 seat!',
   gameNumber: 'Game {n}',
 };
 

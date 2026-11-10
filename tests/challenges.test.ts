@@ -187,6 +187,24 @@ describe('points', () => {
   });
 });
 
+describe('iced coffee', () => {
+  it('makes you run faster for a few seconds', () => {
+    const s = gameWith('crowd');
+    s.standers = [];
+    s.phaseEndsAt = Infinity;
+    const [a, b] = s.players;
+    a!.pos = { x: -6, z: -0.9 };
+    b!.pos = { x: -6, z: 0.9 };
+    s.powerUps = [{ id: 99, kind: 'coffee', pos: { ...a!.pos } }];
+    const ev = step(s, new Map(), DT);
+    expect(ev).toContainEqual({ type: 'powerUp', playerId: 'a', kind: 'coffee' });
+    const run = { moveX: 1, moveZ: 0, action: false };
+    for (let i = 0; i < 60; i++) step(s, new Map([['a', run], ['b', run]]), DT);
+    expect(a!.pos.x - b!.pos.x).toBeGreaterThan(1);
+    expect(a!.vel.x).toBeCloseTo(CONFIG.player.speed * CONFIG.powerUp.boostSpeed, 1);
+  });
+});
+
 describe('power-ups', () => {
   it('one lies on the floor every stop and is picked up by walking over it', () => {
     const s = createGame(four, 11);

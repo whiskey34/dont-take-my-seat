@@ -320,6 +320,7 @@ export class ClientSession implements GameSession {
     me.eliminated = server.eliminated;
     me.stunnedUntil = server.stunnedUntil;
     me.shieldUntil = server.shieldUntil;
+    me.boostUntil = server.boostUntil;
     me.sleeping = server.sleeping;
     const active = (this.state.phase === 'riding' || this.state.phase === 'scramble') && server.seatId === null && !server.eliminated;
     const latest = this.snaps[this.snaps.length - 1];

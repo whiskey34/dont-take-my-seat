@@ -26,4 +26,7 @@ export const SCENE = {
   puddle: '#5fa8d3',
   puddleShine: '#dff3ff',
   kick: '#ff5a4e',
+  coffee: '#c08552', // milky iced coffee
+  coffeeDark: '#5a3620', // espresso settled at the bottom
+  ice: '#eaf7ff',
 } as const;

@@ -34,6 +34,8 @@ Detail teknis ada di [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 - **Power-up di lantai** (satu per stasiun, ambil dengan berjalan di atasnya):
   - 🎧 **Earphone:** kebal dorongan selama 4 detik.
   - 💤 **Pura-pura tidur:** sekali duduk di kursi prioritas tanpa disuruh berdiri.
+  - 🧋 **Es kopi:** lari lebih cepat selama 5 detik.
+- **Kursi makin sedikit:** di stasiun-stasiun awal kursi cukup untuk semua, lalu makin jauh makin sedikit, dan di stasiun terakhir perjalanan cuma ada 1 kursi.
 - Sensitivitas stik, nama, bahasa, dan suara bisa diatur di **Pengaturan** (juga dari menu jeda).
 
 ## Memasang di HP

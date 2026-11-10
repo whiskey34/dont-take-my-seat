@@ -32,6 +32,7 @@ export interface Player {
   shieldUntil: number; // earphones: pushes have no effect until then
   sleeping: boolean; // "pretend to sleep": the next priority seat is kept
   score: number; // points, carried from game to game in one session
+  boostUntil: number; // iced coffee: runs faster until then
 }
 
 export interface Seat {
@@ -58,8 +59,8 @@ export interface Puddle {
 
 export type PointsReason = 'round' | 'win' | 'kick';
 
-export type PowerUpKind = 'earphones' | 'sleep';
-export const POWER_UP_KINDS: readonly PowerUpKind[] = ['earphones', 'sleep'];
+export type PowerUpKind = 'earphones' | 'sleep' | 'coffee';
+export const POWER_UP_KINDS: readonly PowerUpKind[] = ['earphones', 'sleep', 'coffee'];
 
 /** A standing NPC passenger: an obstacle that drifts around the aisle. */
 export interface Stander {

@@ -86,13 +86,21 @@ intro → riding (kereta jalan, goyang, lalu mengerem)
 - Daftar stasiun ada di `src/core/config.ts`: `BOGOR_LINE` (Commuter Line Bogor dari Bogor sampai Jakarta Kota, 24 stasiun) dan `NAMBO_BRANCH` (Nambo, Cibinong, bergabung di Citayam). Stasiun yang di peta belum melayani penumpang (Gambir, Sukaresmi, Pondok Rajeg, Gunung Putri) tidak dipakai.
 - Setiap game memilih satu perjalanan acak dari seed (`pickRoute`): 8 stasiun berurutan, ke arah Jakarta Kota atau ke arah Bogor, atau sesekali dari Nambo lewat Citayam. `route[0]` adalah stasiun keberangkatan (tampil saat intro), lalu setiap stop adalah stasiun berikutnya. Kalau stasiun diulang (tidak ada yang duduk), namanya tetap sama.
 
+## Jumlah kursi per stasiun
+
+`seatsThisStop()` (angkanya di `CONFIG.seats`): makin jauh perjalanan, makin sedikit kursi.
+- Stop 1–2: kursi untuk semua pemain (pemanasan; yang gagal duduk tetap gugur).
+- Stop 3–4: kurang satu. Stop 5 dan seterusnya: kurang dua (minimal 1).
+- Stasiun terakhir perjalanan (`isFinalStop`): hanya 1 kursi, jadi game selalu selesai di sana. Papan stasiun menulis "Stasiun terakhir: cuma 1 kursi!".
+
 ## Challenge dan power-up
 
 - Logikanya ada di `src/core/challenges.ts`, dan angkanya (kekuatan rem, jumlah penumpang, durasi earphone) di `CONFIG.challenge` dan `CONFIG.powerUp`.
 - Challenge dipilih acak (RNG ber-seed) saat kereta berangkat dari setiap stasiun, jadi host dan replay selalu konsisten.
 - Challenge **adu tendang** (`kickFight`): tombol aksi menendang pemain yang duduk dari kursinya (`seatKickTarget`, jarak dari depan kursi), jeda 2 detik; ronde tidak berakhir lebih awal walau semua kursi terisi. Challenge **lantai becek** (`puddles`): 3 genangan; di dalamnya kecepatan berbelok (`responsiveness`) turun dari 12 menjadi 1,6 sehingga pemain tergelincir. Prediksi client memakai fungsi `move()` yang sama, jadi licinnya terasa sama.
 - **Poin** (`Player.score`, angka di `CONFIG.points`): +10 per ronde tetap duduk, +5 per tendangan, +50 menang; setiap perubahan juga dikirim sebagai event `points`. Poin dibawa ke game berikutnya lewat `PlayerSetup.score` (pesan `start`). Layar game over menghitung mundur 8 detik lalu memulai game berikutnya; di multiplayer host yang memulai dan semua pemain ikut.
-- Snapshot multiplayer (sejak protokol **v2**, sekarang **v5**: poin di kolom ke-15 dan genangan `pd`) membawa challenge, waktu rem, sisi pintu, posisi penumpang berdiri, power-up, serta status earphone dan pura-pura tidur tiap pemain. Pemain dengan versi game berbeda akan ditolak dengan pesan jelas.
+- Power-up 🧋 **es kopi** (`boostUntil`): lari 1,4× lebih cepat selama 5 detik.
+- Snapshot multiplayer (sejak protokol **v2**, sekarang **v6**: poin di kolom ke-15, es kopi di kolom ke-16, genangan `pd`) membawa challenge, waktu rem, sisi pintu, posisi penumpang berdiri, power-up, serta status earphone dan pura-pura tidur tiap pemain. Pemain dengan versi game berbeda akan ditolak dengan pesan jelas.
 
 ## Web app (PWA)
 

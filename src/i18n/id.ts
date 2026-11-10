@@ -15,13 +15,13 @@ export const id: Strings = {
   close: 'Tutup',
   rules: [
     'Naik kereta bersama 3 penumpang lain.',
-    'Di setiap stasiun beberapa penumpang turun. Kursinya selalu kurang satu.',
+    'Di setiap stasiun beberapa penumpang turun. Di stasiun-stasiun awal kursinya cukup untuk semua; makin jauh kursinya makin sedikit, dan di stasiun terakhir cuma ada 1.',
     'Gerak pakai stik, tekan DUDUK di dekat kursi yang menyala.',
     'Belum dapat kursi saat pintu tertutup? Kamu gugur.',
     'Tekan DORONG untuk menyingkirkan lawan dari jalanmu.',
     'Kursi merah adalah kursi prioritas. Duduk di sana dan kamu akan diminta berdiri.',
     'Setiap stasiun ada challenge: rem mendadak (terus bergerak), penumpang berdiri menghalangi, pintu hanya di satu sisi, adu tendang (TENDANG lawan dari kursinya), atau lantai becek (licin, kamu tergelincir).',
-    'Ambil item di lantai: 🎧 earphone menahan dorongan, 💤 pura-pura tidur membuatmu aman di kursi prioritas sekali.',
+    'Ambil item di lantai: 🎧 earphone menahan dorongan, 💤 pura-pura tidur membuatmu aman di kursi prioritas sekali, 🧋 es kopi membuatmu lari lebih cepat.',
     'Penumpang terakhir yang duduk menang. Poin: +10 tiap stasiun kamu tetap duduk, +5 tiap tendangan, +50 kalau menang. Poin terus bertambah dari game ke game.',
   ],
   you: 'Kamu',
@@ -122,5 +122,7 @@ export const id: Strings = {
   reconnecting: 'Sinyal terganggu, menyambung ulang…',
   weakSignal: 'Sinyal lemah…',
   pingMs: 'Ping {n} ms',
+  gotCoffee: '🧋 Es kopi! Lari lebih cepat 5 detik',
+  finalStop: '🏁 Stasiun terakhir: cuma 1 kursi!',
   gameNumber: 'Game {n}',
 };
