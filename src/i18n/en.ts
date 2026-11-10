@@ -119,6 +119,7 @@ export const en = {
   nextGameSoon: 'The next game starts in a moment…',
   reconnecting: 'Weak signal, reconnecting…',
   weakSignal: 'Weak signal…',
+  pingMs: 'Ping {n} ms',
   gameNumber: 'Game {n}',
 };
 

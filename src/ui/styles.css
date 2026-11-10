@@ -227,6 +227,55 @@ button {
   fill: var(--text);
 }
 
+/* Connection quality next to the pause button (multiplayer only). */
+#hudPing {
+  width: auto;
+  min-width: 40px;
+  padding: 0 8px;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  --ping: var(--sit);
+}
+
+#hudPing[hidden] {
+  display: none;
+}
+
+#hudPing svg path {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.22);
+  stroke-width: 2.4;
+  stroke-linecap: round;
+}
+
+#hudPing svg circle {
+  fill: var(--ping);
+}
+
+#hudPing.l1 .a1,
+#hudPing.l2 .a1,
+#hudPing.l2 .a2,
+#hudPing.l3 path {
+  stroke: var(--ping);
+}
+
+#hudPing.l2 {
+  --ping: var(--accent);
+}
+
+#hudPing.l1,
+#hudPing.l0 {
+  --ping: var(--danger);
+}
+
+#hudPingMs {
+  font-size: 11px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--ping);
+}
+
 #seatsLeft {
   position: absolute;
   top: calc(86px + var(--safe-t));

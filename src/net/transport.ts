@@ -23,6 +23,8 @@ export interface Transport {
   close(): void;
   /** How the connection to a peer travels (for the debug panel), if known. */
   route?(peer: string): Promise<string>;
+  /** Round-trip time to a peer in ms, if this transport can measure it. */
+  rtt?(peer: string): Promise<number | null>;
 }
 
 /** Holds handlers until the session attaches; buffers early events. */

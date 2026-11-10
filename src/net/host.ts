@@ -92,6 +92,15 @@ export class HostNet {
     this.publishLobby();
   }
 
+  /** The slowest player's round-trip time (ms), null if unknown; undefined if not measurable. */
+  async worstRtt(): Promise<number | null | undefined> {
+    const rtt = this.transport.rtt?.bind(this.transport);
+    if (!rtt) return undefined;
+    const all = await Promise.all(this.peerIds().map((p) => rtt(p)));
+    const known = all.filter((x): x is number => x !== null);
+    return known.length ? Math.max(...known) : null;
+  }
+
   /** Enough people connected to play (room games have no bots). */
   get canStart(): boolean {
     return this.members.filter((m) => m.peer !== null).length >= 2;

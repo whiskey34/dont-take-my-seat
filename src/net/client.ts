@@ -75,6 +75,12 @@ export class ClientNet {
     return this.myId;
   }
 
+  /** Round-trip time to the host (ms); null if unknown. Undefined if this connection cannot measure it. */
+  rtt(): Promise<number | null> | undefined {
+    if (!this.transport.rtt) return undefined;
+    return this.hostId ? this.transport.rtt(this.hostId) : Promise.resolve(null);
+  }
+
   /** Connection route to the host, for the debug panel. */
   route(): Promise<string> {
     return this.hostId && this.transport.route ? this.transport.route(this.hostId) : Promise.resolve('?');

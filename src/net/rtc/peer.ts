@@ -84,6 +84,22 @@ export class Peer {
     }
   }
 
+  /** Round-trip time to the other side in ms (from WebRTC's own measurements), or null. */
+  async rtt(): Promise<number | null> {
+    try {
+      const stats = await this.pc.getStats();
+      let best: number | null = null;
+      stats.forEach((r: { type: string; state?: string; nominated?: boolean; selected?: boolean; currentRoundTripTime?: number }) => {
+        if (r.type === 'candidate-pair' && r.state === 'succeeded' && (r.nominated || r.selected) && typeof r.currentRoundTripTime === 'number') {
+          best ??= Math.round(r.currentRoundTripTime * 1000);
+        }
+      });
+      return best;
+    } catch {
+      return null;
+    }
+  }
+
   /** "direct UDP 35 ms", "TURN TCP 80 ms", … from the selected ICE candidate pair. */
   async route(): Promise<string> {
     try {

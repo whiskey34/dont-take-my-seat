@@ -121,5 +121,6 @@ export const id: Strings = {
   nextGameSoon: 'Game berikutnya segera dimulai…',
   reconnecting: 'Sinyal terganggu, menyambung ulang…',
   weakSignal: 'Sinyal lemah…',
+  pingMs: 'Ping {n} ms',
   gameNumber: 'Game {n}',
 };

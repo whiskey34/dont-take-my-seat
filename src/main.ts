@@ -92,6 +92,7 @@ class App {
     this.startDemo();
     requestAnimationFrame(this.frame);
     this.startBackgroundTicker();
+    window.setInterval(() => void this.updatePing(), 1000);
     // Updates reload the page, so only apply them while sitting in the main menu.
     initPwa({ isSafeToReload: () => this.mode === 'menu' && !this.net, onInstallChange: () => this.syncInstall() });
     this.syncInstall();
@@ -176,6 +177,27 @@ class App {
     this.show(null);
     this.hud.show(true);
     this.last = performance.now();
+  }
+
+  /**
+   * Wi-Fi style signal icon next to pause: round-trip time to the host (for a
+   * player) or to the slowest player (for the host). Hidden in offline games.
+   */
+  private async updatePing(): Promise<void> {
+    const el = $('hudPing');
+    const net = this.net;
+    const inGame = this.mode === 'playing' || this.mode === 'paused' || this.mode === 'over';
+    const rtt = !inGame || !net ? undefined : net.kind === 'client' ? await net.client.rtt() : await net.host.worstRtt();
+    if (rtt === undefined && !this.reconnecting) {
+      el.hidden = true;
+      return;
+    }
+    const stalled = this.reconnecting || (this.session instanceof ClientSession && this.session.stalled);
+    const level = stalled ? 0 : rtt === null || rtt === undefined ? 2 : rtt < 100 ? 3 : rtt < 200 ? 2 : rtt < 400 ? 1 : 0;
+    el.hidden = false;
+    el.className = `icon-btn l${level}`;
+    $('hudPingMs').textContent = stalled ? '!' : typeof rtt === 'number' ? String(rtt) : '';
+    el.title = el.ariaLabel = stalled ? t('weakSignal') : typeof rtt === 'number' ? t('pingMs', { n: rtt }) : '';
   }
 
   private startDebugPanel(): void {

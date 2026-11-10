@@ -29,6 +29,10 @@ export class RtcHostTransport implements Transport {
     this.links.get(to)?.send(channel, data);
   }
 
+  rtt(peer: string): Promise<number | null> {
+    return this.links.get(peer)?.rtt() ?? Promise.resolve(null);
+  }
+
   setHandlers(h: TransportHandlers): void {
     this.slot.set(h);
   }
@@ -138,6 +142,10 @@ export class RtcJoinTransport implements Transport {
 
   route(): Promise<string> {
     return this.peer?.route() ?? Promise.resolve('none');
+  }
+
+  rtt(): Promise<number | null> {
+    return this.peer?.rtt() ?? Promise.resolve(null);
   }
 
   close(): void {
