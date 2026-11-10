@@ -22,6 +22,9 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
+      - name: Worker typecheck
+        working-directory: worker
+        run: npm ci && npm run typecheck
 
   # Checks that the free public relays used for room codes still work.
   # Informational: a relay being down should not block a merge.

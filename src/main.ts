@@ -13,6 +13,7 @@ import { chatPlayerKey, claimPlayerKey } from './net/playerKey';
 import { cleanName, type LobbyPlayer } from './net/protocol';
 import { RtcHostTransport, RtcJoinTransport } from './net/rtc/room';
 import { LocalSignaling } from './net/signal/local';
+import { getIceServers } from './net/rtc/ice';
 import { RoomSignaling } from './net/signal/roomSignaling';
 import { newRoomCode, normalizeCode, randomId, type Signaling } from './net/signal/signal';
 import { PLAYER_COLORS } from './render/palette';
@@ -192,6 +193,7 @@ class App {
 
   private async createRoom(): Promise<void> {
     if (!('RTCPeerConnection' in window)) return this.notice(t('errNoRtc'));
+    void getIceServers(); // fetch TURN credentials while the lobby opens
     const code = newRoomCode(cryptoRandom);
     const signaling = makeSignaling(code);
     this.openLobby({ code, isHost: true, status: t('creatingRoom') });
@@ -213,6 +215,7 @@ class App {
   }
 
   private async joinRoom(raw: string): Promise<void> {
+    void getIceServers();
     const code = normalizeCode(raw);
     if (!code) {
       $('joinError').textContent = t('errBadCode');

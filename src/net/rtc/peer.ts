@@ -1,10 +1,14 @@
 import type { Channel } from '../transport';
 
-const ICE_SERVERS: RTCIceServer[] = [
+const STUN_ONLY: RTCIceServer[] = [
   { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] },
   { urls: 'stun:stun.cloudflare.com:3478' },
 ];
 const GATHER_TIMEOUT_MS = 2500;
+/** TURN over TCP/TLS takes longer to allocate; wait a bit more when it is configured. */
+const GATHER_TIMEOUT_TURN_MS = 5000;
+/** Once a relay candidate exists, give the rest a moment and send the offer. */
+const AFTER_RELAY_MS = 700;
 
 /**
  * One WebRTC connection with two data channels:
@@ -18,12 +22,18 @@ export class Peer {
   private readonly fast: RTCDataChannel;
   private opened = false;
   private closed = false;
+  private readonly withTurn: boolean;
+  private relaySeen = false;
   onOpen: () => void = () => {};
   onClose: () => void = () => {};
   onMessage: (channel: Channel, data: string) => void = () => {};
 
-  constructor() {
-    this.pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+  constructor(iceServers: RTCIceServer[] = STUN_ONLY) {
+    this.withTurn = iceServers.some((s) => (Array.isArray(s.urls) ? s.urls : [s.urls]).some((u) => u.startsWith('turn')));
+    this.pc = new RTCPeerConnection({ iceServers });
+    this.pc.addEventListener('icecandidate', (e) => {
+      if (e.candidate?.type === 'relay') this.relaySeen = true;
+    });
     // Negotiated channels exist on both sides without an extra round trip.
     this.rel = this.pc.createDataChannel('reliable', { negotiated: true, id: 0, ordered: true });
     this.fast = this.pc.createDataChannel('fast', { negotiated: true, id: 1, ordered: false, maxRetransmits: 0 });
@@ -87,14 +97,22 @@ export class Peer {
 
   private gatheredSdp(): Promise<string> {
     return new Promise((resolve) => {
-      const done = () => resolve(this.pc.localDescription?.sdp ?? '');
+      let finished = false;
+      const timers: Array<ReturnType<typeof setTimeout>> = [];
+      const done = () => {
+        if (finished) return;
+        finished = true;
+        timers.forEach(clearTimeout);
+        resolve(this.pc.localDescription?.sdp ?? '');
+      };
       if (this.pc.iceGatheringState === 'complete') return done();
-      const timer = setTimeout(done, GATHER_TIMEOUT_MS);
+      timers.push(setTimeout(done, this.withTurn ? GATHER_TIMEOUT_TURN_MS : GATHER_TIMEOUT_MS));
+      const onRelay = () => {
+        if (this.relaySeen) timers.push(setTimeout(done, AFTER_RELAY_MS));
+      };
+      this.pc.addEventListener('icecandidate', onRelay);
       this.pc.addEventListener('icegatheringstatechange', () => {
-        if (this.pc.iceGatheringState === 'complete') {
-          clearTimeout(timer);
-          done();
-        }
+        if (this.pc.iceGatheringState === 'complete') done();
       });
     });
   }

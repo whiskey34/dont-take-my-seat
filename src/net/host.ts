@@ -283,9 +283,13 @@ export class HostSession implements GameSession {
     this.snapTimer += dt;
     if (this.snapTimer >= SNAP_INTERVAL || events.length > 0) {
       this.snapTimer = 0;
-      this.broadcast('fast', JSON.stringify({ t: 'snap', s: packSnapshot(this.sim.state, this.offlineIds()) } satisfies HostMsg));
+      this.broadcast('fast', JSON.stringify({ t: 'snap', s: packSnapshot(this.sim.state, this.offlineIds(), this.acks()) } satisfies HostMsg));
     }
     return events;
+  }
+
+  private acks(): Array<[string, number]> {
+    return [...this.remote].filter(([, r]) => r.seq >= 0).map(([id, r]) => [id, r.seq]);
   }
 
   view(): GameState {

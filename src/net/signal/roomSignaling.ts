@@ -1,8 +1,10 @@
+import { SIGNAL_URL } from '../config';
 import { open, roomKeys, seal, type RoomKeys } from './crypto';
 import { BROKERS, MqttLink } from './mqtt';
 import { NOSTR_RELAYS, NostrIdentity, NostrLink } from './nostr';
 import type { RelayLink } from './relayLink';
 import { parseSignal, type SignalMsg, type Signaling } from './signal';
+import { WorkerLink } from './workerLink';
 
 /**
  * Room-code signaling with no server of our own.
@@ -14,11 +16,14 @@ import { parseSignal, type SignalMsg, type Signaling } from './signal';
  * page becomes visible or the network comes back.
  */
 export interface RelayList {
+  /** Our Cloudflare Worker (base URL), the main path when configured. */
+  worker?: readonly string[];
   mqtt: readonly string[];
   nostr: readonly string[];
 }
 
-export const DEFAULT_RELAYS: RelayList = { mqtt: BROKERS, nostr: NOSTR_RELAYS };
+/** The Worker first; free public relays stay as a backup path. */
+export const DEFAULT_RELAYS: RelayList = { worker: SIGNAL_URL ? [SIGNAL_URL] : [], mqtt: BROKERS, nostr: NOSTR_RELAYS };
 
 export class RoomSignaling implements Signaling {
   readonly ready: Promise<void>;
@@ -41,6 +46,7 @@ export class RoomSignaling implements Signaling {
       const receive = (p: Uint8Array<ArrayBuffer>) => void this.receive(p);
       const identity = new NostrIdentity();
       this.links = [
+        ...(relays.worker ?? []).map((base) => new WorkerLink(base, topic, receive)),
         ...relays.mqtt.map((url) => new MqttLink(url, topic, receive)),
         ...relays.nostr.map((url) => new NostrLink(url, topic, identity, receive)),
       ];

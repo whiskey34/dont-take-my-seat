@@ -22,15 +22,17 @@ net/       HostNet · ClientNet    lobby, protokol berversi (protocol.ts)
 RtcHost/JoinTransport          MessengerTransport
  (WebRTC, 2 DataChannel)        (Mini Game SDK di WebView)
         │
-   Signaling: MqttSignaling (kode room, broker publik, terenkripsi)
-              LocalSignaling (antar tab, untuk tes)
+   Signaling: RoomSignaling (kode room, terenkripsi): Cloudflare Worker
+              + MQTT + Nostr bersamaan · LocalSignaling (antar tab, untuk tes)
+   ICE:       Cloudflare TURN dari Worker (/turn), cadangan STUN publik
 ```
 
 ## Gerakan halus
 
 - **Offline dan host:** simulasi berjalan tetap 60 kali per detik, lalu posisi di-interpolasi di antara dua tick sesuai refresh rate layar.
 - **Pemain (client):**
-  - Gerakan sendiri **diprediksi** langsung di HP, lalu dikoreksi perlahan ke posisi dari host. Koreksi menjadi cepat saat terkena dorongan, dan langsung lompat kalau selisihnya lebih dari 1,5 m.
+  - Gerakan sendiri **diprediksi** langsung di HP. Input gerak dikirim ±60 kali per detik dengan nomor urut; snapshot dari host membawa nomor input terakhir yang sudah dipakai host (`ack`, protokol **v4**). Setiap snapshot, HP mulai dari posisi host lalu memutar ulang input yang belum sampai ke host (*reconciliation*). Selisih kecil disembunyikan dengan offset visual yang memudar cepat; selisih lebih dari 1,5 m (didorong, duduk) langsung ditampilkan.
+  - Sebelumnya HP hanya ditarik perlahan ke posisi host. Dengan latensi nyata (mis. Safari lewat Wi-Fi/seluler) tarikan itu memperlambat gerakan sampai ±40% sehingga kontrol terasa kaku; tes `keeps a remote player responsive under 100 ms latency` menjaga ini.
   - Pemain lain digambar **120 ms di belakang** dan di-interpolasi di antara snapshot, sehingga tetap halus meskipun ada paket yang hilang.
 - Snapshot dikirim 20 kali per detik lewat channel `fast` (boleh hilang); event dan aksi lewat `reliable`.
 
@@ -40,7 +42,8 @@ RtcHost/JoinTransport          MessengerTransport
 2. Pemain mengirim `hello` ke topik tersebut berulang kali. Host membalas dengan offer WebRTC (kandidat ICE dikumpulkan di awal), lalu pemain membalas answer.
 3. Setelah DataChannel terbuka, pemain berhenti memakai relay.
 
-**Relay yang dipakai bersamaan** (`src/net/signal/roomSignaling.ts`), semuanya dicek langsung di CI (job `brokers`):
+**Relay yang dipakai bersamaan** (`src/net/signal/roomSignaling.ts`):
+- **Cloudflare Worker** (jalur utama bila `VITE_SIGNAL_URL` diisi saat build, atau `?worker=URL`): WebSocket di port 443 ke `/room/<topik>`, satu Durable Object per room. Kode dan cara pasang di `worker/` (lihat `worker/README.md`).
 - MQTT: `broker.emqx.io:8084`, `broker.hivemq.com:8884`.
 - Nostr (port 443, untuk jaringan yang memblokir port MQTT): `relay.damus.io`, `relay.primal.net`, `relay.snort.social`, `offchain.pub`. Yang pernah dicoba tapi tidak meneruskan event: `nos.lol`, `nostr.mom`, `relay.nostr.band`.
 
@@ -48,11 +51,13 @@ RtcHost/JoinTransport          MessengerTransport
 
 **Alur bergabung** (`RtcJoinTransport`): tahap *mencari room* → *room ditemukan, menyambungkan* → (bila koneksi langsung gagal atau macet 15 detik) *mencoba lagi* dengan id baru. Batas total 60 detik, lalu pesan berbeda untuk "room tidak ditemukan" dan "room ditemukan tapi HP tidak bisa tersambung langsung".
 
-**Keterbatasan:** belum ada server TURN. Lima server TURN gratis tanpa pendaftaran (openrelay.metered.ca, freestun.net) diuji dari browser di CI (job `turn`) dan semuanya gagal. Jadi HP di jaringan yang sangat ketat (sebagian CGNAT seluler, Wi-Fi dengan isolasi klien) mungkin tidak bisa tersambung langsung. Solusinya TURN dengan akun gratis (Metered, Cloudflare Calls), yang belum dipasang.
+**TURN** (`src/net/rtc/ice.ts`): saat membuat atau bergabung ke room, game mengambil kredensial Cloudflare TURN dari Worker (`/turn`, berlaku 4 jam). TURN berjalan di port 443 dan 80 (TCP/TLS juga), sehingga HP di operator yang memblokir koneksi langsung (Indosat, XL, Biznet, CGNAT, Wi-Fi dengan isolasi klien) tetap tersambung lewat relay Cloudflare. Pengumpulan kandidat ICE menunggu sampai 5 detik bila TURN aktif, dan selesai 0,7 detik setelah kandidat relay pertama muncul. Tanpa Worker, hanya STUN publik (server TURN gratis tanpa daftar sudah diuji di CI dan semuanya gagal).
+
+**Tes 4 pemain:** 4 browser terpisah, relay publik diblokir, hanya lewat Worker lokal: keempat pemain masuk lobby dalam ±4 detik dan bermain bersama.
 
 ## Keluar dan bergabung lagi
 
-- Setiap perangkat punya **kunci pemain** acak yang disimpan di pengaturan (`playerKey`) dan dikirim di pesan `hello` (protokol **v3**). Tab kedua di browser yang sama mendapat kuncinya sendiri lewat Web Lock (`src/net/playerKey.ts`). Di dalam chat app, kuncinya diturunkan dari ID pengguna chat.
+- Setiap perangkat punya **kunci pemain** acak yang disimpan di pengaturan (`playerKey`) dan dikirim di pesan `hello` (sejak protokol **v3**). Tab kedua di browser yang sama mendapat kuncinya sendiri lewat Web Lock (`src/net/playerKey.ts`). Di dalam chat app, kuncinya diturunkan dari ID pengguna chat.
 - Host menyimpan tiap pemain sebagai *member*: id pemain (tetap selama game), kunci, dan koneksi saat ini. Kalau koneksi putus atau pemain kembali ke menu **saat game berjalan**, tempatnya disimpan: karakternya diam di tempat (tidak dikendalikan bot) dan tampil "Terputus" (daftar `off` di snapshot). Game tidak dijeda.
 - Saat perangkat dengan kunci yang sama menyapa lagi, host menyambungkannya ke id pemain lamanya, lalu mengirim ulang `welcome` dan `start` plus snapshot terbaru, sehingga pemain melanjutkan di posisi dan kondisi saat itu. Orang asing tetap ditolak (`started`) selama game berjalan.
 - Menu menampilkan tombol **Gabung lagi ke room KODE** selama 30 menit setelah bergabung dengan kode room. Tombol ini hilang kalau room ditutup atau menolak.
@@ -86,5 +91,6 @@ intro → riding (kereta jalan, goyang, lalu mengerem)
 
 | Parameter | Fungsi |
 |---|---|
+| `?worker=https://…workers.dev` | Pakai Worker ini untuk kode room dan TURN (mengganti `VITE_SIGNAL_URL`) |
 | `?signal=local` | Kode room lewat antar tab (tanpa internet), untuk tes WebRTC di satu browser |
 | `?mock=messenger&user=u1` | Messenger tiruan (`u1` = host, `u2`–`u4` = peserta) |

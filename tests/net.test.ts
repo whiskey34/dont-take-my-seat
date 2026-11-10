@@ -9,13 +9,18 @@ import { NO_INPUT } from '../src/core/types';
 
 /** In-memory network: a hub that delivers messages on the next pump. */
 class Hub {
-  queue: Array<() => void> = [];
+  private items: Array<{ fn: () => void; due: number }> = [];
+  private tick = 0;
   dropFast = 0;
+  /** Extra one-way delay, in pumps. */
+  latency = 0;
   rng = 1;
+  readonly queue = { push: (fn: () => void) => this.items.push({ fn, due: this.tick + 1 + this.latency }) };
   pump(): void {
-    const q = this.queue;
-    this.queue = [];
-    q.forEach((fn) => fn());
+    this.tick++;
+    const now = this.items.filter((i) => i.due <= this.tick);
+    this.items = this.items.filter((i) => i.due > this.tick);
+    now.forEach((i) => i.fn());
   }
   random(): number {
     this.rng = (this.rng * 16807) % 2147483647;
@@ -214,6 +219,42 @@ describe('host and clients', () => {
       sat = me.seatId !== null;
     }
     expect(sat).toBe(true);
+  });
+
+  it('keeps a remote player responsive under 100 ms latency (no rubber-banding)', () => {
+    const { hub, host, clients } = setupRoom();
+    hub.latency = 6; // ≈100 ms each way at 60 fps
+    const session = host.start('normal', 5);
+    for (let i = 0; i < 20; i++) hub.pump();
+    const a = clients[0]!.rec.session!;
+    const dt = 1 / 60;
+    const shown = () => ({ ...a.view().players.find((p) => p.id === 'A')!.pos });
+    let backwards = 0;
+    let moved = 0;
+    let speed = 0;
+    for (let tick = 0; tick < 60 * 8; tick++) {
+      const phase = session.state.phase;
+      const active = phase === 'riding' || phase === 'scramble';
+      // Walk left and right in 1-second strokes.
+      const dir = Math.floor(tick / 60) % 2 === 0 ? 1 : -1;
+      const before = shown();
+      a.update(dt, active ? { moveX: dir, moveZ: 0, action: false } : NO_INPUT);
+      session.update(dt, NO_INPUT);
+      clients[1]!.rec.session!.update(dt, NO_INPUT);
+      hub.pump();
+      const after = shown();
+      const me = session.state.players.find((p) => p.id === 'A')!;
+      // Ignore frames at the ends of the car and on direction changes.
+      if (active && me.seatId === null && tick % 60 > 15 && Math.abs(after.x) < 5) {
+        moved++;
+        if ((after.x - before.x) * dir < -0.002) backwards++;
+        speed += ((after.x - before.x) * dir) / dt;
+      }
+    }
+    expect(moved).toBeGreaterThan(60);
+    // Before input acknowledgements the shown speed dropped to ~2.4 m/s (stiff controls).
+    expect(speed / moved).toBeGreaterThan(CONFIG.player.speed * 0.85);
+    expect(backwards).toBeLessThanOrEqual(3);
   });
 
   it('names bots bot_user_1, bot_user_2, …', () => {

@@ -1,7 +1,7 @@
 import { CHALLENGE_KINDS, POWER_UP_KINDS, type ChallengeKind, type GameEvent, type GameState, type Phase, type Player, type PlayerSetup, type PowerUpKind, type Seat } from '../core/types';
 
 /** Bump when messages change incompatibly; peers with another version are refused. */
-export const PROTOCOL_VERSION = 3;
+export const PROTOCOL_VERSION = 4;
 export const MAX_NAME = 14;
 
 export interface LobbyPlayer {
@@ -49,6 +49,8 @@ export interface Snapshot {
   ds: -1 | 0 | 1;
   /** Players whose device is disconnected right now (their character stands still). */
   off: string[];
+  /** [playerId, last movement input seq the host has applied] for client reconciliation. */
+  ack: Array<[string, number]>;
   /** Standing passengers [id, x, z] and power-ups [id, kind, x, z]. */
   st: Array<[number, number, number]>;
   pu: Array<[number, PowerUpKind, number, number]>;
@@ -60,9 +62,10 @@ export interface Snapshot {
 
 const r3 = (n: number) => Math.round(n * 1000) / 1000;
 
-export function packSnapshot(s: GameState, offline: Iterable<string> = []): Snapshot {
+export function packSnapshot(s: GameState, offline: Iterable<string> = [], acks: Iterable<[string, number]> = []): Snapshot {
   return {
     off: [...offline],
+    ack: [...acks],
     time: r3(s.time),
     phase: s.phase,
     end: Number.isFinite(s.phaseEndsAt) ? r3(s.phaseEndsAt) : -1,
@@ -231,6 +234,7 @@ function isSnapshot(v: unknown): v is Snapshot {
   if (!isNum(v.bk) || (v.ds !== -1 && v.ds !== 0 && v.ds !== 1)) return false;
   if (!Array.isArray(v.st) || v.st.length > 12 || !v.st.every((r) => Array.isArray(r) && r.length === 3 && r.every(isNum))) return false;
   if (!Array.isArray(v.off) || v.off.length > 4 || !v.off.every((x) => isStr(x))) return false;
+  if (!Array.isArray(v.ack) || v.ack.length > 4 || !v.ack.every((a) => Array.isArray(a) && a.length === 2 && isStr(a[0]) && isInt(a[1]))) return false;
   return (
     Array.isArray(v.pu) &&
     v.pu.length <= 4 &&

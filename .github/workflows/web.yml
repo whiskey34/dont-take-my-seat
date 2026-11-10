@@ -28,6 +28,9 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run build
+        env:
+          # The Cloudflare Worker URL (repository variable), e.g. https://dtms-signal.<you>.workers.dev
+          VITE_SIGNAL_URL: ${{ vars.SIGNAL_URL }}
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist

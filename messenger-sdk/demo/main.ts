@@ -5,6 +5,7 @@
  * Devices find each other with a room code and then talk over real WebRTC
  * connections, like a P2P chat app.
  */
+import { getIceServers } from '../../src/net/rtc/ice';
 import { LocalSignaling } from '../../src/net/signal/local';
 import { RoomSignaling } from '../../src/net/signal/roomSignaling';
 import { newRoomCode, normalizeCode, type Signaling, type SignalMsg } from '../../src/net/signal/signal';
@@ -49,10 +50,12 @@ document.addEventListener('visibilitychange', () => games.handleLifecycle(!docum
 const chatChannels = new Map<string, RTCDataChannel>();
 const signal: Signaling = params.get('signal') === 'local' ? new LocalSignaling(`demo-${room}`) : new RoomSignaling(`demo-${room}`);
 
+// Cloudflare TURN when the Worker is configured (like the chat app's own TURN), else STUN.
+let iceServers: RTCIceServer[] = [{ urls: ['stun:stun.l.google.com:19302', 'stun:stun.cloudflare.com:3478'] }];
+void getIceServers().then((s) => (iceServers = s));
+
 function newConnection(peerId: string): RTCPeerConnection {
-  const pc = new RTCPeerConnection({
-    iceServers: [{ urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] }, { urls: 'stun:stun.cloudflare.com:3478' }],
-  });
+  const pc = new RTCPeerConnection({ iceServers });
   // SDK: attach game channels right after creating the connection, on both sides.
   gameLinks.attach(peerId, pc);
   const chat = pc.createDataChannel('chat', { negotiated: true, id: 0 });
@@ -78,7 +81,7 @@ const pcs = new Map<string, RTCPeerConnection>();
 async function gathered(pc: RTCPeerConnection): Promise<string> {
   if (pc.iceGatheringState !== 'complete') {
     await new Promise<void>((resolve) => {
-      const t = setTimeout(resolve, 2500);
+      const t = setTimeout(resolve, iceServers.some((s) => String(s.urls).includes('turn')) ? 5000 : 2500);
       pc.addEventListener('icegatheringstatechange', () => pc.iceGatheringState === 'complete' && (clearTimeout(t), resolve()));
     });
   }

@@ -1,0 +1,18 @@
+# Cloudflare Worker for Don't Take My Seat: room signaling + TURN credentials.
+# Deploy: GitHub Actions workflow "Deploy Cloudflare Worker" (see README.md here).
+name = "dtms-signal"
+main = "src/index.ts"
+compatibility_date = "2026-10-01"
+
+[vars]
+# Web pages allowed to use this Worker (signaling and TURN).
+ALLOWED_ORIGINS = "https://whiskey34.github.io,http://localhost:4173,http://localhost:5173"
+
+[[durable_objects.bindings]]
+name = "ROOMS"
+class_name = "Room"
+
+# SQLite-backed Durable Objects work on the Workers Free plan.
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Room"]

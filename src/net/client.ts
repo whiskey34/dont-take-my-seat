@@ -7,7 +7,10 @@ import type { Transport } from './transport';
 
 /** How far behind the newest snapshot other players are drawn (seconds). */
 const INTERP_DELAY = 0.12;
-const INPUT_INTERVAL = 1 / 30;
+/** Movement input goes out about every frame (60 Hz) so the host can acknowledge it precisely. */
+const INPUT_INTERVAL = 1 / 75;
+/** Longest stretch of unacknowledged input we replay (seconds of frames). */
+const MAX_HISTORY = 90;
 
 export type CloseReason = RejectReason | 'hostLeft' | 'timeout' | 'unreachable';
 
@@ -108,6 +111,12 @@ export class ClientNet {
   }
 }
 
+interface Frame {
+  seq: number; // last movement seq sent when this frame ran
+  dt: number;
+  input: PlayerInput;
+}
+
 interface Buffered {
   snap: Snapshot;
   at: number; // local clock when received
@@ -127,6 +136,11 @@ export class ClientSession implements GameSession {
   private offset: number | null = null; // host time - local clock
   private seq = 0;
   private lastSent = { x: 0, z: 0, at: -1 };
+  private moveSeq = -1;
+  private history: Frame[] = [];
+  private reconciledAt = -1; // host time of the snapshot we last reconciled with
+  /** Visual-only offset that hides small corrections; fades out quickly. */
+  private smooth: Vec2 = { x: 0, z: 0 };
   private readonly me: Player;
   private offlineSet: ReadonlySet<string> = new Set();
   private disposed = false;
@@ -177,11 +191,19 @@ export class ClientSession implements GameSession {
     if (input.action) this.sendMsg({ t: 'act', s: ++this.seq });
     const changed = Math.abs(input.moveX - this.lastSent.x) > 0.05 || Math.abs(input.moveZ - this.lastSent.z) > 0.05;
     if (changed || this.clock - this.lastSent.at >= INPUT_INTERVAL) {
-      this.sendMsg({ t: 'in', s: ++this.seq, x: round2(input.moveX), z: round2(input.moveZ) });
+      this.moveSeq = ++this.seq;
+      this.sendMsg({ t: 'in', s: this.moveSeq, x: round2(input.moveX), z: round2(input.moveZ) });
       this.lastSent = { x: input.moveX, z: input.moveZ, at: this.clock };
     }
   }
 
+  /**
+   * Client-side prediction with reconciliation: the host tells us the last
+   * input it applied, so on every snapshot we restart from the host's position
+   * and replay only the inputs it has not seen yet. Under real latency (phone
+   * networks, Safari on Wi-Fi) the stick stays responsive instead of being
+   * pulled back towards where the host saw us a moment ago.
+   */
   private predict(dt: number, input: PlayerInput): void {
     const server = this.state.players.find((p) => p.id === this.humanId);
     if (!server) return;
@@ -192,34 +214,63 @@ export class ClientSession implements GameSession {
     me.shieldUntil = server.shieldUntil;
     me.sleeping = server.sleeping;
     const active = (this.state.phase === 'riding' || this.state.phase === 'scramble') && server.seatId === null && !server.eliminated;
-    if (!active || this.snaps.length === 0) {
+    const latest = this.snaps[this.snaps.length - 1];
+    if (!active || !latest) {
       me.pos = { ...server.pos };
       me.vel = { ...server.vel };
       me.facing = server.facing;
+      this.history = [];
+      this.smooth = { x: 0, z: 0 };
       return;
     }
-    const now = this.hostNow();
-    const predicted = { ...this.state, time: now };
+    this.history.push({ seq: this.moveSeq, dt, input: { moveX: input.moveX, moveZ: input.moveZ, action: false } });
+    if (this.history.length > MAX_HISTORY) this.history.shift();
+
+    const ack = latest.snap.ack.find((a) => a[0] === this.humanId)?.[1];
+    if (latest.snap.time !== this.reconciledAt && ack !== undefined) {
+      this.reconciledAt = latest.snap.time;
+      const before = { ...me.pos };
+      // Inputs up to `ack` are already inside the host's position.
+      this.history = this.history.filter((f) => f.seq > ack);
+      me.pos = { ...server.pos };
+      me.vel = { ...server.vel };
+      let t = latest.snap.time;
+      for (const f of this.history) {
+        t += f.dt;
+        this.step(me, f.input, f.dt, t);
+      }
+      const ex = before.x + this.smooth.x - me.pos.x;
+      const ez = before.z + this.smooth.z - me.pos.z;
+      // Big jumps (pushed, teleported to a seat) are shown as they are.
+      this.smooth = Math.hypot(ex, ez) > 1.5 ? { x: 0, z: 0 } : { x: ex, z: ez };
+    } else {
+      this.step(me, input, dt, this.hostNow());
+      if (ack === undefined) this.pullTowards(server, dt); // host without acks yet
+    }
+    const k = Math.exp(-12 * dt);
+    this.smooth.x *= k;
+    this.smooth.z *= k;
+  }
+
+  private step(me: Player, input: PlayerInput, dt: number, time: number): void {
+    const predicted = { ...this.state, time };
     move(predicted, me, input, dt);
     keepOutOfStanders(predicted, me);
     constrainToCar(me);
+  }
 
-    // Where the host probably has us now: last known position moved on by its velocity.
-    const latest = this.snaps[this.snaps.length - 1]!;
-    const lag = Math.max(0, Math.min(0.3, now - latest.snap.time));
-    const target: Vec2 = { x: server.pos.x + server.vel.x * lag, z: server.pos.z + server.vel.z * lag };
-    const ex = target.x - me.pos.x;
-    const ez = target.z - me.pos.z;
-    const err = Math.hypot(ex, ez);
-    if (err > 1.5) {
-      me.pos = target;
-      me.vel = { ...server.vel };
-    } else {
-      const stunned = now < server.stunnedUntil;
-      const k = 1 - Math.exp(-(stunned ? 14 : 3.5) * dt);
-      me.pos.x += ex * k;
-      me.pos.z += ez * k;
+  /** Fallback correction when no acknowledgement is available. */
+  private pullTowards(server: Player, dt: number): void {
+    const me = this.me;
+    const ex = server.pos.x - me.pos.x;
+    const ez = server.pos.z - me.pos.z;
+    if (Math.hypot(ex, ez) > 1.5) {
+      me.pos = { ...server.pos };
+      return;
     }
+    const k = 1 - Math.exp(-3.5 * dt);
+    me.pos.x += ex * k;
+    me.pos.z += ez * k;
   }
 
   offline(): ReadonlySet<string> {
@@ -230,7 +281,7 @@ export class ClientSession implements GameSession {
     const now = this.hostNow();
     const renderAt = now - INTERP_DELAY;
     const view = withPositions(this.state, (p) => {
-      if (p.id === this.humanId) return this.me.pos;
+      if (p.id === this.humanId) return { x: this.me.pos.x + this.smooth.x, z: this.me.pos.z + this.smooth.z };
       return this.interpolated(p.id, renderAt) ?? p.pos;
     });
     view.time = Math.max(this.state.time, Math.min(now, this.state.time + 0.5));

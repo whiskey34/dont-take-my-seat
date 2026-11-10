@@ -1,5 +1,6 @@
 import { HandlerSlot, type Channel, type Transport, type TransportHandlers } from '../transport';
 import type { Signaling, SignalMsg } from '../signal/signal';
+import { getIceServers } from './ice';
 import { Peer } from './peer';
 
 const PENDING_TIMEOUT_MS = 16_000;
@@ -43,7 +44,9 @@ export class RtcHostTransport implements Transport {
     if (this.closed || m.from === this.selfId) return;
     if (m.type === 'hello') {
       if (this.links.has(m.from) || !this.accepting()) return;
-      const peer = new Peer();
+      const iceServers = await getIceServers();
+      if (this.closed || this.links.has(m.from)) return;
+      const peer = new Peer(iceServers);
       this.links.set(m.from, peer);
       peer.onOpen = () => this.slot.peerOpen(m.from);
       peer.onMessage = (ch, data) => this.slot.message(m.from, ch, data);
@@ -73,6 +76,9 @@ export class RtcHostTransport implements Transport {
     }
   }
 }
+
+/** ICE servers, normally already fetched while the player typed the code. */
+const iceServersNow = (): Promise<RTCIceServer[]> => getIceServers();
 
 export type JoinStage = 'searching' | 'connecting' | 'retrying';
 export type JoinFailure = 'timeout' | 'unreachable';
@@ -171,7 +177,8 @@ export class RtcJoinTransport implements Transport {
   private async onSignal(m: SignalMsg): Promise<void> {
     if (this.closed || m.type !== 'offer' || m.to !== this.id || this.peer) return;
     const host = m.from;
-    const peer = new Peer();
+    const peer = new Peer(await iceServersNow());
+    if (this.closed || this.peer) return peer.close();
     this.peer = peer;
     this.hostId = host;
     this.foundHost = true;

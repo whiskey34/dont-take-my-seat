@@ -2,3 +2,6 @@ node_modules/
 dist/
 .DS_Store
 coverage/
+worker/node_modules/
+worker/.wrangler/
+worker/.dev.vars
