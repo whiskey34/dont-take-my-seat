@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { botThink, createBrain } from '../src/ai/bot';
 import { CONFIG } from '../src/core/config';
 import { alivePlayers, createGame, step } from '../src/core/game';
-import { seatFront } from '../src/core/layout';
+import { seatFront, seatSitPos } from '../src/core/layout';
 import type { ChallengeKind, GameEvent, GameState, PlayerInput, PlayerSetup } from '../src/core/types';
 
 const DT = 1 / CONFIG.tickRate;
@@ -118,6 +118,27 @@ describe('kick fight and wet floor', () => {
       }
     }
     expect(s.phase).toBe('scramble');
+  });
+
+  it('kick fight: kicks the player right in front even with an empty seat next to them', () => {
+    const s = gameWith('kickFight');
+    runUntil(s, (x) => x.phase === 'scramble');
+    const [a, b] = s.players;
+    // An empty seat right next to an occupied one.
+    const seat = s.seats.find((x) => !x.priority && !x.npc && x.playerId === null && s.seats.some((y) => y.side === x.side && Math.abs(y.x - x.x - CONFIG.car.seatWidth) < 0.01 && !y.priority))!;
+    const next = s.seats.find((y) => y.side === seat.side && Math.abs(y.x - seat.x - CONFIG.car.seatWidth) < 0.01)!;
+    next.npc = false;
+    next.playerId = 'a';
+    a!.seatId = next.id;
+    a!.pos = seatSitPos(next);
+    seat.npc = false;
+    seat.playerId = null;
+    // Between the two, a bit closer to the occupied seat: both are in reach.
+    const f = seatFront(next);
+    b!.pos = { x: f.x - 0.3, z: f.z };
+    b!.pushReadyAt = 0;
+    const ev = step(s, new Map([['b', press]]), DT);
+    expect(ev.some((e) => e.type === 'seatKick' && e.target === 'a')).toBe(true);
   });
 
   it('no kicking off seats outside a kick fight', () => {

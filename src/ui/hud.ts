@@ -1,5 +1,5 @@
 import { CONFIG } from '../core/config';
-import { isFinalStop, pushTarget, seatInReach, seatKickTarget, trainAccel } from '../core/game';
+import { isFinalStop, kickBeatsSitting, pushTarget, seatInReach, seatKickTarget, trainAccel } from '../core/game';
 import type { GameEvent, GameState, Player } from '../core/types';
 import { t } from '../i18n';
 import { PLAYER_COLORS } from '../render/palette';
@@ -207,7 +207,9 @@ export class Hud {
     const active = !!me && !me.eliminated && me.seatId === null && (state.phase === 'riding' || state.phase === 'scramble');
     this.actionBtn.classList.toggle('hidden', !active);
     if (!me || !active) return;
-    const canSit = !!seatInReach(state, me);
+    const free = seatInReach(state, me);
+    const kickFirst = !!free && kickBeatsSitting(state, me, free);
+    const canSit = !!free && !kickFirst;
     const canKick = !canSit && !!seatKickTarget(state, me);
     this.actionBtn.classList.toggle('sit', canSit);
     this.actionBtn.classList.toggle('kick', canKick);

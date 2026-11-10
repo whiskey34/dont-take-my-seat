@@ -285,6 +285,9 @@ function handleAction(s: GameState, p: Player, input: PlayerInput, events: GameE
   if (!input.action || p.seatId !== null || s.time < p.stunnedUntil) return;
 
   const seat = seatInReach(s, p);
+  // Kick fight: standing right in front of someone seated kicks them, even
+  // when an empty seat is also within reach (the closer one wins).
+  if (seat && s.time >= p.pushReadyAt && kickBeatsSitting(s, p, seat)) return kickOffSeat(s, p, seatKickTarget(s, p)!, events);
   if (seat) {
     seat.playerId = p.id;
     p.seatId = seat.id;
@@ -321,6 +324,13 @@ function handleAction(s: GameState, p: Player, input: PlayerInput, events: GameE
   target.vel.z += (dz / len) * PUSH.impulse;
   target.stunnedUntil = s.time + PUSH.stun;
   events.push({ type: 'pushed', by: p.id, target: target.id });
+}
+
+/** True when a seated player is closer in front of us than the free seat we could take. */
+export function kickBeatsSitting(s: GameState, p: Player, freeSeat: Seat): boolean {
+  const victim = seatKickTarget(s, p);
+  const theirs = victim ? findSeat(s, victim.seatId) : undefined;
+  return !!theirs && dist(p.pos, seatFront(theirs)) < dist(p.pos, seatFront(freeSeat));
 }
 
 /** Kick fight: a seated player right in front of us that we could kick off their seat. */
