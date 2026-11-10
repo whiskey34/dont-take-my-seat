@@ -11,6 +11,7 @@ export class Controls {
   private keys = new Set<string>();
   private actionQueued = false;
   private radius = 56;
+  private reach = 1; // stick travel for full speed, relative to the drawn stick size
   private dead = 0.12;
   private curve = 1;
   /** Event counts for the ?debug panel. */
@@ -62,10 +63,11 @@ export class Controls {
    */
   setSensitivity(level: number): void {
     const i = Math.max(1, Math.min(5, Math.round(level))) - 1;
-    this.radius = [80, 68, 56, 46, 38][i]!;
+    // The stick is drawn at a size that suits the screen; sensitivity only
+    // changes how far the thumb has to move for full speed.
+    this.reach = [1.3, 1.15, 1, 0.85, 0.7][i]!;
     this.dead = [0.14, 0.12, 0.1, 0.08, 0.06][i]!;
     this.curve = [1.5, 1.25, 1, 0.85, 0.7][i]!;
-    this.base.style.setProperty('--stick-size', `${this.radius * 2 + 8}px`);
   }
 
   /** Returns this tick's input. The action press is consumed. */
@@ -90,11 +92,9 @@ export class Controls {
   }
 
   reset(): void {
-    this.stick = { x: 0, y: 0 };
-    this.stickPointer = null;
+    this.release();
     this.keys.clear();
     this.actionQueued = false;
-    this.base.classList.remove('active');
   }
 
   private onDown = (e: PointerEvent) => {
@@ -110,6 +110,8 @@ export class Controls {
       /* not supported */
     }
     this.origin = { x: e.clientX, y: e.clientY };
+    const drawn = this.base.offsetWidth / 2 || 60;
+    this.radius = Math.max(30, (drawn - 4) * this.reach);
     const rect = this.zone.getBoundingClientRect();
     this.base.style.left = `${e.clientX - rect.left}px`;
     this.base.style.top = `${e.clientY - rect.top}px`;
@@ -119,25 +121,34 @@ export class Controls {
 
   private onMove = (e: PointerEvent) => {
     if (e.pointerId !== this.stickPointer) return;
-    let dx = e.clientX - this.origin.x;
-    let dy = e.clientY - this.origin.y;
-    const d = Math.hypot(dx, dy);
-    if (d > this.radius) {
-      dx = (dx / d) * this.radius;
-      dy = (dy / d) * this.radius;
-    }
-    this.updateKnob(dx, dy);
+    const rawX = e.clientX - this.origin.x;
+    const rawY = e.clientY - this.origin.y;
+    const d = Math.hypot(rawX, rawY);
+    // Knob stays on the rim when the thumb goes further; the direction and
+    // strength come from the real thumb position. (Before, the clamped knob
+    // offset was divided by the real distance, so pushing the thumb further
+    // made the player slower, down to a third of full speed.)
+    const k = d > this.radius ? this.radius / d : 1;
+    this.updateKnob(rawX * k, rawY * k);
     const mag = Math.min(1, d / this.radius);
     const scaled = mag < this.dead ? 0 : ((mag - this.dead) / (1 - this.dead)) ** this.curve;
-    this.stick = d > 0 ? { x: (dx / d) * scaled, y: (dy / d) * scaled } : { x: 0, y: 0 };
+    this.stick = d > 0 ? { x: (rawX / d) * scaled, y: (rawY / d) * scaled } : { x: 0, y: 0 };
   };
 
   private onUp = (e: PointerEvent) => {
     if (e.pointerId !== this.stickPointer) return;
+    this.release();
+  };
+
+  /** Back to rest: centred knob, stick in its home spot (bottom left). */
+  private release(): void {
     this.stickPointer = null;
     this.stick = { x: 0, y: 0 };
     this.base.classList.remove('active');
-  };
+    this.base.style.left = '';
+    this.base.style.top = '';
+    this.updateKnob(0, 0);
+  }
 
   private updateKnob(dx: number, dy: number): void {
     this.knob.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
