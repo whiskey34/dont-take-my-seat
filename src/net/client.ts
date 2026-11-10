@@ -173,6 +173,9 @@ export class ClientSession implements GameSession {
   private moveSeq = -1;
   private maxInput = 0; // strongest stick input in the last few seconds (debug)
   private maxInputAt = 0;
+  /** Stuck detector (debug): pushing the stick for a second while the host does not move us. */
+  private push = { since: -1, from: { x: 0, z: 0 } };
+  private stuckLog: string[] = [];
   private history: Frame[] = [];
   private reconciledAt = -1; // host time of the snapshot we last reconciled with
   /** Visual-only offset that hides small corrections; fades out quickly. */
@@ -211,6 +214,7 @@ export class ClientSession implements GameSession {
       phase: `${this.state.phase}${me && me.seatId !== null ? ' (seated)' : ''}${me?.eliminated ? ' (out)' : ''}`,
       pos: `${this.me.pos.x.toFixed(2)}, ${this.me.pos.z.toFixed(2)} (host ${me ? `${me.pos.x.toFixed(2)}, ${me.pos.z.toFixed(2)}` : '-'})`,
       maxInput5s: this.maxInput.toFixed(2),
+      ...Object.fromEntries(this.stuckLog.map((l, i) => [`log${i + 1}`, l])),
     };
   }
 
@@ -250,7 +254,30 @@ export class ClientSession implements GameSession {
     return out;
   }
 
+  private watchStuck(input: PlayerInput): void {
+    const server = this.state.players.find((p) => p.id === this.humanId);
+    const free = !!server && !server.eliminated && server.seatId === null && (this.state.phase === 'riding' || this.state.phase === 'scramble');
+    const pushing = free && Math.hypot(input.moveX, input.moveZ) > 0.5 && this.hostNow() >= server.stunnedUntil;
+    if (!pushing || !server) {
+      this.push.since = -1;
+      return;
+    }
+    if (this.push.since < 0) this.push = { since: this.clock, from: { ...server.pos } };
+    if (this.clock - this.push.since < 1.2) return;
+    const moved = Math.hypot(server.pos.x - this.push.from.x, server.pos.z - this.push.from.z);
+    if (moved < 0.1) {
+      const latest = this.snaps[this.snaps.length - 1];
+      const ack = latest?.snap.ack.find((a) => a[0] === this.humanId)?.[1];
+      this.stuckLog.unshift(
+        `STUCK ${this.state.phase} host ${server.pos.x.toFixed(2)},${server.pos.z.toFixed(2)} me ${this.me.pos.x.toFixed(2)},${this.me.pos.z.toFixed(2)} sent #${this.moveSeq} ack #${ack ?? '-'} in ${input.moveX.toFixed(1)},${input.moveZ.toFixed(1)}`,
+      );
+      this.stuckLog.length = Math.min(this.stuckLog.length, 3);
+    }
+    this.push = { since: this.clock, from: { ...server.pos } };
+  }
+
   private sendInput(input: PlayerInput): void {
+    this.watchStuck(input);
     const mag = Math.hypot(input.moveX, input.moveZ);
     if (mag >= this.maxInput || this.clock - this.maxInputAt > 5) {
       this.maxInput = mag;

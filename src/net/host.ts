@@ -210,6 +210,8 @@ interface RemoteInput {
   z: number;
   seq: number;
   action: boolean;
+  at: number; // when the latest input arrived (ms), for the debug panel
+  count: number;
 }
 
 /** The authoritative game on the host device. The host also plays. */
@@ -240,7 +242,9 @@ export class HostSession implements GameSession {
 
   /** Input from a player (already mapped from connection to player id). */
   receive(playerId: string, msg: { t: 'in'; s: number; x: number; z: number } | { t: 'act'; s: number }): void {
-    const r = this.remote.get(playerId) ?? { x: 0, z: 0, seq: -1, action: false };
+    const r = this.remote.get(playerId) ?? { x: 0, z: 0, seq: -1, action: false, at: 0, count: 0 };
+    r.at = Date.now();
+    r.count++;
     if (msg.t === 'act') r.action = true;
     else if (msg.s > r.seq) {
       // Older packets on the unordered channel are ignored.
@@ -289,6 +293,19 @@ export class HostSession implements GameSession {
       this.broadcast('fast', JSON.stringify({ t: 'snap', s: packSnapshot(this.sim.state, this.offlineIds(), this.acks()) } satisfies HostMsg));
     }
     return events;
+  }
+
+  /** One line per remote player: what the host receives and does with them (?debug). */
+  debug(): string[] {
+    const s = this.sim.state;
+    return s.players
+      .filter((p) => !p.isBot && p.id !== this.humanId)
+      .map((p) => {
+        const r = this.remote.get(p.id);
+        const got = r ? `in ${r.x.toFixed(2)},${r.z.toFixed(2)} #${r.seq} ${Date.now() - r.at}ms ago n${r.count}` : 'no input';
+        const st = p.eliminated ? 'out' : p.seatId !== null ? 'seated' : s.time < p.stunnedUntil ? 'stunned' : 'free';
+        return `${p.name}: ${got} · pos ${p.pos.x.toFixed(2)},${p.pos.z.toFixed(2)} ${st}`;
+      });
   }
 
   private acks(): Array<[string, number]> {

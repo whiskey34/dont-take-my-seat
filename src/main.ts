@@ -6,7 +6,7 @@ import { NO_INPUT, type GameEvent, type GameState, type PlayerSetup } from './co
 import { detectLang, getLang, onLangChange, rules, setLang, t, type Lang } from './i18n';
 import { Controls } from './input/controls';
 import { ClientNet, ClientSession, type CloseReason } from './net/client';
-import { botName, HostNet } from './net/host';
+import { botName, HostNet, HostSession } from './net/host';
 import { MessengerTransport, findBridge } from './net/messenger';
 import { installMockMessenger } from './net/mockMessenger';
 import { chatPlayerKey, claimPlayerKey } from './net/playerKey';
@@ -196,6 +196,7 @@ class App {
       const s = this.session;
       const lines = [`v${__APP_VERSION__} · ${s.kind} · mode ${this.mode} · ${frames * 2} fps`, `stick ${this.controls.peek()}`];
       frames = 0;
+      if (s instanceof HostSession) lines.push(...s.debug());
       if (s instanceof ClientSession) {
         lines.push(`route ${route}${this.reconnecting ? ' · reconnecting' : ''}`);
         for (const [k, v] of Object.entries(s.debug())) lines.push(`${k} ${v}`);
