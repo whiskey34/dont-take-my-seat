@@ -34,6 +34,13 @@ export class Hud {
   private bannerTimer = 0;
   private humanId: string | null = null;
 
+  /** Connection notice above everything (e.g. rejoining after the signal dropped); '' hides it. */
+  notice(text: string): void {
+    const el = $('netNotice');
+    el.textContent = text;
+    el.hidden = !text;
+  }
+
   show(visible: boolean): void {
     this.root.hidden = !visible;
   }

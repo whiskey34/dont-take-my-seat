@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { CONFIG } from '../src/core/config';
 import { createGame, step } from '../src/core/game';
 import { ClientNet, type ClientSession, type CloseReason } from '../src/net/client';
@@ -365,5 +365,51 @@ describe('host and clients', () => {
     hub.pump();
     hub.pump();
     expect(clients[1]!.rec.closed).toBe('hostLeft');
+  });
+
+  it('reports a dropped link as "lost" (not the host leaving), and silence during a game too', () => {
+    vi.useFakeTimers();
+    try {
+      const { hub, host, hostT, clients } = setupRoom();
+      host.start('normal', 5);
+      hub.pump();
+      // A: the connection itself drops, without a goodbye from the host.
+      hostT.links.delete('A');
+      clients[0]!.t.links.delete('H');
+      clients[0]!.t.slot.peerClose('H');
+      expect(clients[0]!.rec.closed).toBe('lost');
+      // B: the link stays "open" but nothing arrives any more (weak signal).
+      hostT.links.delete('B');
+      vi.advanceTimersByTime(5000);
+      expect(clients[1]!.rec.closed).toBe('lost');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('a player whose signal dropped comes back to the same character at its current position', () => {
+    const { hub, host, hostT, clients } = setupRoom();
+    const session = host.start('normal', 8);
+    for (let i = 0; i < 60 * 4; i++) {
+      session.update(1 / 60, NO_INPUT);
+      hub.pump();
+    }
+    const where = { ...session.state.players.find((p) => p.id === 'A')!.pos };
+    clients[0]!.t.close();
+    hub.pump();
+    // Same device key, new connection.
+    const t2 = new FakeTransport('A2', hub);
+    FakeTransport.connect(hostT, t2);
+    let back: ClientSession | null = null;
+    new ClientNet(t2, 'H', 'Player A', 'key-of-A', { lobby: () => {}, start: (s) => (back = s), closed: () => {} });
+    for (let i = 0; i < 5; i++) {
+      session.update(1 / 60, NO_INPUT);
+      hub.pump();
+    }
+    expect(back).not.toBeNull();
+    const me = back!.view().players.find((p) => p.id === back!.humanId)!;
+    expect(back!.humanId).toBe('A');
+    expect(Math.hypot(me.pos.x - where.x, me.pos.z - where.z)).toBeLessThan(0.3);
+    expect(session.state.players.filter((p) => p.isBot).length).toBe(1); // no bot took over
   });
 });

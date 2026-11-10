@@ -118,5 +118,6 @@ export const id: Strings = {
   nextGameIn: 'Game berikutnya dalam {n}…',
   continueNow: 'Lanjut',
   nextGameSoon: 'Game berikutnya segera dimulai…',
+  reconnecting: 'Sinyal terganggu, menyambung ulang…',
   gameNumber: 'Game {n}',
 };

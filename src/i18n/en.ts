@@ -116,6 +116,7 @@ export const en = {
   nextGameIn: 'Next game in {n}…',
   continueNow: 'Continue',
   nextGameSoon: 'The next game starts in a moment…',
+  reconnecting: 'Weak signal, reconnecting…',
   gameNumber: 'Game {n}',
 };
 

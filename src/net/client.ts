@@ -12,7 +12,14 @@ const INPUT_INTERVAL = 1 / 75;
 /** Longest stretch of unacknowledged input we replay (seconds of frames). */
 const MAX_HISTORY = 90;
 
-export type CloseReason = RejectReason | 'hostLeft' | 'timeout' | 'unreachable';
+/**
+ * `lost`: the link to the host dropped or went silent (bad signal), but the
+ * host did not say goodbye, so the game is probably still running there.
+ */
+export type CloseReason = RejectReason | 'hostLeft' | 'timeout' | 'unreachable' | 'lost';
+
+/** No word from the host for this long during a game means the link is dead. */
+const SILENCE_MS = 4000;
 
 export interface ClientCallbacks {
   lobby(players: LobbyPlayer[]): void;
@@ -25,6 +32,12 @@ export class ClientNet {
   private myId: string | null = null;
   private session: ClientSession | null = null;
   private done = false;
+  private lastHeard = Date.now();
+  private readonly watchdog: ReturnType<typeof setInterval>;
+  private readonly onVisible = () => {
+    // Timers sleep in the background; give the link a fresh chance when we are back.
+    if (typeof document === 'undefined' || !document.hidden) this.lastHeard = Date.now();
+  };
 
   /** `hostId` may be null when the host is only known once it connects. */
   constructor(
@@ -36,16 +49,24 @@ export class ClientNet {
   ) {
     transport.setHandlers({
       message: (from, _ch, data) => {
-        if (from === this.hostId) this.onMessage(data);
+        if (from !== this.hostId) return;
+        this.lastHeard = Date.now();
+        this.onMessage(data);
       },
       peerOpen: (id) => {
         this.hostId ??= id;
         if (id === this.hostId) this.send({ t: 'hello', v: PROTOCOL_VERSION, name: this.name, k: this.key });
       },
       peerClose: (id) => {
-        if (id === this.hostId) this.finish('hostLeft');
+        if (id === this.hostId) this.finish('lost');
       },
     });
+    // During a game the host sends 20 snapshots a second; silence means a dead link.
+    this.watchdog = setInterval(() => {
+      const hidden = typeof document !== 'undefined' && document.hidden;
+      if (this.session && !hidden && Date.now() - this.lastHeard > SILENCE_MS) this.finish('lost');
+    }, 1000);
+    if (typeof document !== 'undefined') document.addEventListener('visibilitychange', this.onVisible);
     if (hostId && transport.peers().includes(hostId)) this.send({ t: 'hello', v: PROTOCOL_VERSION, name, k: key });
   }
 
@@ -62,7 +83,13 @@ export class ClientNet {
   leave(): void {
     this.send({ t: 'bye' });
     this.done = true;
+    this.stopWatching();
     this.transport.close();
+  }
+
+  private stopWatching(): void {
+    clearInterval(this.watchdog);
+    if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', this.onVisible);
   }
 
   private onMessage(data: string): void {
@@ -80,6 +107,7 @@ export class ClientNet {
         break;
       case 'start':
         if (!this.myId) return;
+        this.lastHeard = Date.now();
         this.session?.dispose();
         this.session = new ClientSession(this.myId, msg.players, msg.seed, (m) => this.send(m));
         this.cb.start(this.session);
@@ -99,6 +127,7 @@ export class ClientNet {
   private finish(reason: CloseReason): void {
     if (this.done) return;
     this.done = true;
+    this.stopWatching();
     this.session?.dispose();
     this.transport.close();
     this.cb.closed(reason);
@@ -155,6 +184,11 @@ export class ClientSession implements GameSession {
     const me = this.state.players.find((p) => p.id === humanId);
     if (!me) throw new Error('Host did not include this player');
     this.me = { ...me, pos: { ...me.pos }, vel: { ...me.vel } };
+  }
+
+  /** True once the host's state has arrived (before that the view is only the opening layout). */
+  get hasSnapshot(): boolean {
+    return this.snaps.length > 0;
   }
 
   receiveSnapshot(snap: Snapshot): void {

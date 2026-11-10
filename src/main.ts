@@ -5,13 +5,13 @@ import { CONFIG } from './core/config';
 import { NO_INPUT, type GameEvent, type GameState, type PlayerSetup } from './core/types';
 import { detectLang, getLang, onLangChange, rules, setLang, t, type Lang } from './i18n';
 import { Controls } from './input/controls';
-import { ClientNet, type CloseReason } from './net/client';
+import { ClientNet, ClientSession, type CloseReason } from './net/client';
 import { botName, HostNet } from './net/host';
 import { MessengerTransport, findBridge } from './net/messenger';
 import { installMockMessenger } from './net/mockMessenger';
 import { chatPlayerKey, claimPlayerKey } from './net/playerKey';
 import { cleanName, type LobbyPlayer } from './net/protocol';
-import { RtcHostTransport, RtcJoinTransport } from './net/rtc/room';
+import { RtcHostTransport, RtcJoinTransport, type JoinStage } from './net/rtc/room';
 import { LocalSignaling } from './net/signal/local';
 import { getIceServers } from './net/rtc/ice';
 import { RoomSignaling } from './net/signal/roomSignaling';
@@ -61,6 +61,10 @@ class App {
   private gameNo = 1;
   private startScores = new Map<string, number>();
   private nextGameTimer = 0;
+  /** Rejoining after the signal dropped; `attempt` tells stale connection attempts apart. */
+  private reconnecting = false;
+  private resumeAfterOver = false;
+  private attempt: symbol | null = null;
   private width = 1;
   private height = 1;
   private seed = (Date.now() & 0x7fffffff) | 1;
@@ -148,10 +152,11 @@ class App {
     this.controls.reset();
   }
 
-  private beginGame(s: GameSession): void {
+  private beginGame(s: GameSession, resumed = false): void {
     window.clearInterval(this.nextGameTimer);
+    this.resumeAfterOver = false;
     // A game that starts from the game-over screen continues the session.
-    this.gameNo = this.mode === 'over' ? this.gameNo + 1 : 1;
+    if (!resumed) this.gameNo = this.mode === 'over' ? this.gameNo + 1 : 1;
     this.startScores = new Map(s.view().players.map((p) => [p.id, p.score]));
     unlockAudio();
     void enterLandscapeFullscreen();
@@ -170,6 +175,16 @@ class App {
     const input = this.mode === 'playing' && !this.isPortrait() ? this.controls.read() : NO_INPUT;
     const events = running ? this.session.update(dt, input) : [];
     const view = this.session.view();
+    // Rejoined while on the results screen and the host has already started the next game.
+    if (this.resumeAfterOver && this.session instanceof ClientSession && this.session.hasSnapshot && view.phase !== 'gameOver') {
+      this.resumeAfterOver = false;
+      window.clearInterval(this.nextGameTimer);
+      this.gameNo++;
+      this.startScores = new Map(view.players.map((p) => [p.id, p.score]));
+      this.mode = 'playing';
+      this.show(null);
+      this.hud.show(true);
+    }
     if (events.length) this.onEvents(view, events);
     this.scene.render(view, running ? dt : 0);
     if (this.mode === 'playing' || this.mode === 'paused' || this.mode === 'over') this.hud.update(view, this.scene, this.width, this.height, this.session.offline?.());
@@ -242,26 +257,43 @@ class App {
     // Remember the room so a player who drops out can come straight back.
     this.settings.lastRoom = { code, at: Date.now() };
     saveSettings(this.settings);
-    const signaling = makeSignaling(code);
     this.openLobby({ code, isHost: false, status: t('connecting') });
+    await this.connectClient(code, (stage) => {
+      if (this.mode !== 'lobby' || this.lobbyPlayers.length > 0) return;
+      $('lobbyStatus').textContent = { searching: t('searchingRoom'), connecting: t('roomFound'), retrying: t('retryingRoom') }[stage];
+    });
+  }
+
+  /** Finds the room by its code and connects to the host. */
+  private async connectClient(code: string, onStage: (stage: JoinStage) => void): Promise<void> {
+    const signaling = makeSignaling(code);
+    const attempt = Symbol('attempt');
+    this.attempt = attempt;
     try {
       await signaling.ready;
     } catch {
       signaling.close();
-      return this.lobbyFailed(t('errNoSignal'));
+      if (this.attempt === attempt) this.connectionClosed('unreachable', t('errNoSignal'));
+      return;
     }
-    if (this.mode !== 'lobby') return signaling.close();
-    const transport = new RtcJoinTransport(
-      signaling,
-      () => randomId('p'),
-      (reason) => this.connectionClosed(reason),
-      (stage) => {
-        if (this.mode !== 'lobby' || this.lobbyPlayers.length > 0) return;
-        $('lobbyStatus').textContent = { searching: t('searchingRoom'), connecting: t('roomFound'), retrying: t('retryingRoom') }[stage];
-      },
-    );
+    // Gave up or left while the relays were connecting.
+    if (this.attempt !== attempt || (this.mode !== 'lobby' && !this.reconnecting)) return signaling.close();
+    const transport = new RtcJoinTransport(signaling, () => randomId('p'), (reason) => this.connectionClosed(reason), onStage);
     const client = new ClientNet(transport, null, this.name, await this.playerKey, this.clientCallbacks());
     this.net = { kind: 'client', client, code, messenger: null };
+  }
+
+  /**
+   * Bad signal: the link to the host dropped but the game goes on there.
+   * Stay on screen and quietly join again with the same player key; the host
+   * puts us back on our character where it is now.
+   */
+  private reconnect(code: string): void {
+    this.reconnecting = true;
+    this.net = null;
+    this.hud.notice(t('reconnecting'));
+    if (this.mode === 'lobby') $('lobbyStatus').textContent = t('reconnecting');
+    void this.connectClient(code, () => {});
   }
 
   /** Launched inside the messenger: the chat decides who plays and who hosts. */
@@ -292,21 +324,48 @@ class App {
 
   private clientCallbacks() {
     return {
-      lobby: (p: LobbyPlayer[]) => this.renderLobby(p),
-      start: (s: GameSession) => this.beginGame(s),
+      lobby: (p: LobbyPlayer[]) => {
+        if (this.reconnecting && this.mode === 'lobby') this.reconnecting = false;
+        this.renderLobby(p);
+      },
+      start: (s: GameSession) => this.clientStarted(s),
       closed: (reason: CloseReason) => this.connectionClosed(reason),
     };
   }
 
-  private connectionClosed(reason: CloseReason): void {
-    const text = {
-      full: t('errFull'),
-      started: t('errStarted'),
-      version: t('errVersion'),
-      hostLeft: t('errHostLeft'),
-      timeout: t('errTimeout'),
-      unreachable: t('errUnreachable'),
-    }[reason];
+  private clientStarted(s: GameSession): void {
+    if (!this.reconnecting) return this.beginGame(s);
+    this.reconnecting = false;
+    this.hud.notice('');
+    if (this.mode === 'over') {
+      // Back on the results screen: wait for the host's state to see whether a new game began.
+      this.setSession(s);
+      this.resumeAfterOver = true;
+      return;
+    }
+    this.beginGame(s, true);
+  }
+
+  private connectionClosed(reason: CloseReason, message?: string): void {
+    const code = this.net?.kind === 'client' && !this.net.messenger ? this.net.code : this.reconnecting ? this.settings.lastRoom?.code ?? null : null;
+    const inRoom = this.mode === 'playing' || this.mode === 'paused' || this.mode === 'over' || this.mode === 'lobby';
+    // A dropped link (not the host leaving): try again without leaving the game.
+    if (reason === 'lost' && code && inRoom && !this.reconnecting) return this.reconnect(code);
+    this.reconnecting = false;
+    this.resumeAfterOver = false;
+    this.attempt = null;
+    this.hud.notice('');
+    const text =
+      message ??
+      {
+        full: t('errFull'),
+        started: t('errStarted'),
+        version: t('errVersion'),
+        hostLeft: t('errHostLeft'),
+        lost: t('errHostLeft'),
+        timeout: t('errTimeout'),
+        unreachable: t('errUnreachable'),
+      }[reason];
     // The room is gone or will not take us back: stop offering to rejoin it.
     if (reason === 'hostLeft' || reason === 'started' || reason === 'full' || reason === 'version' || reason === 'timeout') this.forgetRoom();
     this.net = null;
@@ -428,6 +487,10 @@ class App {
 
   private toMenu(): void {
     window.clearInterval(this.nextGameTimer);
+    this.reconnecting = false;
+    this.resumeAfterOver = false;
+    this.attempt = null;
+    this.hud.notice('');
     this.leaveNet();
     this.mode = 'menu';
     this.hud.show(false);
