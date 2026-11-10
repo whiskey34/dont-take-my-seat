@@ -50,6 +50,15 @@ RtcHost/JoinTransport          MessengerTransport
 
 **Keterbatasan:** belum ada server TURN. Lima server TURN gratis tanpa pendaftaran (openrelay.metered.ca, freestun.net) diuji dari browser di CI (job `turn`) dan semuanya gagal. Jadi HP di jaringan yang sangat ketat (sebagian CGNAT seluler, Wi-Fi dengan isolasi klien) mungkin tidak bisa tersambung langsung. Solusinya TURN dengan akun gratis (Metered, Cloudflare Calls), yang belum dipasang.
 
+## Keluar dan bergabung lagi
+
+- Setiap perangkat punya **kunci pemain** acak yang disimpan di pengaturan (`playerKey`) dan dikirim di pesan `hello` (protokol **v3**). Tab kedua di browser yang sama mendapat kuncinya sendiri lewat Web Lock (`src/net/playerKey.ts`). Di dalam chat app, kuncinya diturunkan dari ID pengguna chat.
+- Host menyimpan tiap pemain sebagai *member*: id pemain (tetap selama game), kunci, dan koneksi saat ini. Kalau koneksi putus atau pemain kembali ke menu **saat game berjalan**, tempatnya disimpan: karakternya diam di tempat (tidak dikendalikan bot) dan tampil "Terputus" (daftar `off` di snapshot). Game tidak dijeda.
+- Saat perangkat dengan kunci yang sama menyapa lagi, host menyambungkannya ke id pemain lamanya, lalu mengirim ulang `welcome` dan `start` plus snapshot terbaru, sehingga pemain melanjutkan di posisi dan kondisi saat itu. Orang asing tetap ditolak (`started`) selama game berjalan.
+- Menu menampilkan tombol **Gabung lagi ke room KODE** selama 30 menit setelah bergabung dengan kode room. Tombol ini hilang kalau room ditutup atau menolak.
+- Pemain yang sudah keluar saat host memulai game berikutnya tidak diikutkan; tempatnya diisi bot.
+- Host tidak bisa digantikan: kalau host keluar, room berakhir untuk semua pemain.
+
 ## Alur satu ronde
 
 ```

@@ -106,4 +106,6 @@ export const id: Strings = {
   retryingRoom: 'Koneksi langsung gagal, mencoba lagi…',
   relayDown: 'Koneksi ke layanan pencarian room terputus, menyambung ulang… Teman belum bisa gabung sampai tersambung lagi.',
   errUnreachable: 'Room ditemukan, tapi HP kalian tidak bisa tersambung langsung. Coba pakai Wi-Fi atau hotspot yang sama, atau matikan VPN.',
+  offline: 'Terputus',
+  rejoinRoom: '↩ Gabung lagi ke room {code}',
 };

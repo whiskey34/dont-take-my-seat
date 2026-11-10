@@ -13,6 +13,8 @@ export interface GameSession {
   update(dt: number, input: PlayerInput): GameEvent[];
   /** State to draw this frame, with smoothed positions. */
   view(): GameState;
+  /** Players whose device is disconnected right now (multiplayer only). */
+  offline?(): ReadonlySet<PlayerId>;
   dispose(): void;
 }
 
@@ -29,20 +31,12 @@ export class Simulation {
   private prev = new Map<PlayerId, Vec2>();
   private acc = 0;
 
-  constructor(setups: readonly PlayerSetup[], seed: number, private readonly difficulty: Difficulty) {
+  constructor(setups: readonly PlayerSetup[], seed: number, difficulty: Difficulty) {
     this.state = createGame(setups, seed);
     this.state.players.forEach((p, i) => {
       if (p.isBot) this.brains.set(p.id, createBrain(seed + i * 7919, difficulty));
     });
     this.snapshotPrev();
-  }
-
-  /** Hands a player over to a bot (e.g. when their connection drops). */
-  makeBot(id: PlayerId): void {
-    const p = this.state.players.find((q) => q.id === id);
-    if (!p || p.isBot) return;
-    p.isBot = true;
-    this.brains.set(id, createBrain(this.state.rngState ^ id.length, this.difficulty));
   }
 
   /**

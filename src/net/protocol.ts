@@ -1,7 +1,7 @@
 import { CHALLENGE_KINDS, POWER_UP_KINDS, type ChallengeKind, type GameEvent, type GameState, type Phase, type Player, type PlayerSetup, type PowerUpKind, type Seat } from '../core/types';
 
 /** Bump when messages change incompatibly; peers with another version are refused. */
-export const PROTOCOL_VERSION = 2;
+export const PROTOCOL_VERSION = 3;
 export const MAX_NAME = 14;
 
 export interface LobbyPlayer {
@@ -12,7 +12,8 @@ export interface LobbyPlayer {
 // --------------------------------------------------------------- messages
 
 export type ClientMsg =
-  | { t: 'hello'; v: number; name: string }
+  /** `k` is this device's player key; the same key can rejoin a game in progress. */
+  | { t: 'hello'; v: number; name: string; k: string }
   | { t: 'in'; s: number; x: number; z: number }
   | { t: 'act'; s: number }
   | { t: 'bye' };
@@ -46,6 +47,8 @@ export interface Snapshot {
   ch: ChallengeKind | '';
   bk: number;
   ds: -1 | 0 | 1;
+  /** Players whose device is disconnected right now (their character stands still). */
+  off: string[];
   /** Standing passengers [id, x, z] and power-ups [id, kind, x, z]. */
   st: Array<[number, number, number]>;
   pu: Array<[number, PowerUpKind, number, number]>;
@@ -57,8 +60,9 @@ export interface Snapshot {
 
 const r3 = (n: number) => Math.round(n * 1000) / 1000;
 
-export function packSnapshot(s: GameState): Snapshot {
+export function packSnapshot(s: GameState, offline: Iterable<string> = []): Snapshot {
   return {
+    off: [...offline],
     time: r3(s.time),
     phase: s.phase,
     end: Number.isFinite(s.phaseEndsAt) ? r3(s.phaseEndsAt) : -1,
@@ -146,6 +150,11 @@ const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFin
 const isStr = (v: unknown, max = 64): v is string => typeof v === 'string' && v.length <= max;
 const isInt = (v: unknown): v is number => Number.isInteger(v);
 
+/** Player keys are random ids made on the device; anything else counts as "no key". */
+export function cleanKey(k: unknown): string {
+  return typeof k === 'string' && /^[A-Za-z0-9_-]{8,40}$/.test(k) ? k : '';
+}
+
 export function cleanName(name: unknown): string {
   const s = typeof name === 'string' ? name : '';
   // Strip control characters and trim to a short display name.
@@ -168,7 +177,7 @@ export function parseClientMsg(data: string): ClientMsg | null {
   if (!isObj(m)) return null;
   switch (m.t) {
     case 'hello':
-      return isInt(m.v) ? { t: 'hello', v: m.v, name: cleanName(m.name) } : null;
+      return isInt(m.v) ? { t: 'hello', v: m.v, name: cleanName(m.name), k: cleanKey(m.k) } : null;
     case 'in':
       if (!isInt(m.s) || !isNum(m.x) || !isNum(m.z)) return null;
       return { t: 'in', s: m.s, x: Math.max(-1, Math.min(1, m.x)), z: Math.max(-1, Math.min(1, m.z)) };
@@ -221,6 +230,7 @@ function isSnapshot(v: unknown): v is Snapshot {
   if (v.ch !== '' && !CHALLENGE_KINDS.includes(v.ch as ChallengeKind)) return false;
   if (!isNum(v.bk) || (v.ds !== -1 && v.ds !== 0 && v.ds !== 1)) return false;
   if (!Array.isArray(v.st) || v.st.length > 12 || !v.st.every((r) => Array.isArray(r) && r.length === 3 && r.every(isNum))) return false;
+  if (!Array.isArray(v.off) || v.off.length > 4 || !v.off.every((x) => isStr(x))) return false;
   return (
     Array.isArray(v.pu) &&
     v.pu.length <= 4 &&

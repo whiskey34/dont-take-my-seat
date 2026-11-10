@@ -28,6 +28,7 @@ export class ClientNet {
     private readonly transport: Transport,
     private hostId: string | null,
     private name: string,
+    private readonly key: string,
     private readonly cb: ClientCallbacks,
   ) {
     transport.setHandlers({
@@ -36,13 +37,13 @@ export class ClientNet {
       },
       peerOpen: (id) => {
         this.hostId ??= id;
-        if (id === this.hostId) this.send({ t: 'hello', v: PROTOCOL_VERSION, name: this.name });
+        if (id === this.hostId) this.send({ t: 'hello', v: PROTOCOL_VERSION, name: this.name, k: this.key });
       },
       peerClose: (id) => {
         if (id === this.hostId) this.finish('hostLeft');
       },
     });
-    if (hostId && transport.peers().includes(hostId)) this.send({ t: 'hello', v: PROTOCOL_VERSION, name });
+    if (hostId && transport.peers().includes(hostId)) this.send({ t: 'hello', v: PROTOCOL_VERSION, name, k: key });
   }
 
   get id(): string | null {
@@ -52,7 +53,7 @@ export class ClientNet {
   /** Changes our name in the lobby (the host treats a repeated hello as a rename). */
   rename(name: string): void {
     this.name = name;
-    if (this.myId) this.send({ t: 'hello', v: PROTOCOL_VERSION, name });
+    if (this.myId) this.send({ t: 'hello', v: PROTOCOL_VERSION, name, k: this.key });
   }
 
   leave(): void {
@@ -127,6 +128,7 @@ export class ClientSession implements GameSession {
   private seq = 0;
   private lastSent = { x: 0, z: 0, at: -1 };
   private readonly me: Player;
+  private offlineSet: ReadonlySet<string> = new Set();
   private disposed = false;
 
   constructor(
@@ -150,6 +152,7 @@ export class ClientSession implements GameSession {
     // Track the host clock; follow faster when it jumps ahead (we were late).
     this.offset = this.offset === null || off > this.offset + 0.25 ? off : this.offset + (off - this.offset) * 0.1;
     applySnapshot(this.state, snap);
+    this.offlineSet = new Set(snap.off);
   }
 
   receiveEvents(events: GameEvent[]): void {
@@ -217,6 +220,10 @@ export class ClientSession implements GameSession {
       me.pos.x += ex * k;
       me.pos.z += ez * k;
     }
+  }
+
+  offline(): ReadonlySet<string> {
+    return this.offlineSet;
   }
 
   view(): GameState {

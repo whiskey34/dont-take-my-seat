@@ -72,7 +72,7 @@ function setupRoom(dropFast = 0) {
     const t = new FakeTransport(id, hub);
     FakeTransport.connect(hostT, t);
     const rec = { session: null as ClientSession | null, closed: null as CloseReason | null, t };
-    const net = new ClientNet(t, 'H', `Player ${id}`, {
+    const net = new ClientNet(t, 'H', `Player ${id}`, `key-of-${id}`, {
       lobby: () => {},
       start: (s) => (rec.session = s),
       closed: (r) => (rec.closed = r),
@@ -126,7 +126,9 @@ describe('protocol', () => {
     expect(parseClientMsg('{"t":"nope"}')).toBeNull();
     expect(parseClientMsg('x'.repeat(70_000))).toBeNull();
     expect(parseClientMsg('{"t":"in","s":1,"x":50,"z":-50}')).toEqual({ t: 'in', s: 1, x: 1, z: -1 });
-    expect(parseClientMsg('{"t":"hello","v":1,"name":"  \\u0000Budi\\u0007 the longest name ever "}')).toEqual({ t: 'hello', v: 1, name: 'Budi the longe' });
+    expect(parseClientMsg('{"t":"hello","v":1,"name":"  \\u0000Budi\\u0007 the longest name ever "}')).toEqual({ t: 'hello', v: 1, name: 'Budi the longe', k: '' });
+    expect(parseClientMsg('{"t":"hello","v":3,"name":"A","k":"abc"}')).toMatchObject({ k: '' }); // too short to be a key
+    expect(parseClientMsg('{"t":"hello","v":3,"name":"A","k":"0123456789abcdef"}')).toMatchObject({ k: '0123456789abcdef' });
     expect(parseHostMsg('{"t":"ev","e":[{"type":"hack"}]}')).toBeNull();
     expect(parseHostMsg('{"t":"start","seed":1,"players":[{"id":"a","isBot":false}]}')).toBeNull();
   });
@@ -139,11 +141,11 @@ describe('host and clients', () => {
     expect(lobbies.at(-1)).toEqual(['Host', 'Player A', 'Player B']);
     const c = new FakeTransport('C', hub);
     FakeTransport.connect(hostT, c);
-    new ClientNet(c, 'H', 'C', { lobby: () => {}, start: () => {}, closed: () => {} });
+    new ClientNet(c, 'H', 'C', 'key-of-C', { lobby: () => {}, start: () => {}, closed: () => {} });
     const d = new FakeTransport('D', hub);
     FakeTransport.connect(hostT, d);
     let reason: CloseReason | null = null;
-    new ClientNet(d, 'H', 'D', { lobby: () => {}, start: () => {}, closed: (r) => (reason = r) });
+    new ClientNet(d, 'H', 'D', 'key-of-D', { lobby: () => {}, start: () => {}, closed: (r) => (reason = r) });
     for (let i = 0; i < 5; i++) hub.pump();
     expect(host.players).toHaveLength(CONFIG.maxPlayers);
     expect(reason).toBe('full');
@@ -214,13 +216,90 @@ describe('host and clients', () => {
     expect(sat).toBe(true);
   });
 
-  it('turns a player who disconnects into a bot, and tells clients when the host leaves', () => {
+  it('names bots bot_user_1, bot_user_2, …', () => {
+    const { hub, host } = setupRoom();
+    const session = host.start('normal', 5);
+    hub.pump();
+    expect(session.state.players.map((p) => p.name)).toEqual(['Host', 'Player A', 'Player B', 'bot_user_1']);
+  });
+
+  it('keeps a disconnected player in the game (no bot), standing still and shown offline', () => {
     const { hub, host, clients } = setupRoom();
     const session = host.start('normal', 5);
     hub.pump();
     clients[0]!.t.close();
     hub.pump();
-    expect(session.state.players.find((p) => p.id === 'A')!.isBot).toBe(true);
+    const a = session.state.players.find((p) => p.id === 'A')!;
+    expect(a.isBot).toBe(false);
+    expect(host.players.map((p) => p.id)).toContain('A');
+    expect([...session.offline()]).toEqual(['A']);
+    // Run into the riding phase: nobody moves A.
+    for (let i = 0; i < 60 * 3; i++) session.update(1 / 60, NO_INPUT);
+    const x = a.pos.x;
+    for (let i = 0; i < 30; i++) session.update(1 / 60, NO_INPUT);
+    expect(Math.abs(a.vel.x) + Math.abs(a.vel.z)).toBeLessThan(3); // only sway, no steering
+    expect(a.pos.x).not.toBeNaN();
+    hub.pump();
+    // The other client sees A as offline.
+    expect([...clients[1]!.rec.session!.offline()]).toEqual(['A']);
+    void x;
+  });
+
+  it('lets a player who left rejoin the game in progress with the same character', () => {
+    const { hub, host, hostT, clients } = setupRoom();
+    const session = host.start('normal', 77);
+    hub.pump();
+    for (let i = 0; i < 60 * 4; i++) session.update(1 / 60, NO_INPUT);
+    clients[0]!.net.leave(); // quits to the main menu
+    hub.pump();
+    hub.pump();
+    expect([...session.offline()]).toEqual(['A']);
+
+    // Comes back on a brand-new connection with the same device key.
+    const t2 = new FakeTransport('A2', hub);
+    FakeTransport.connect(hostT, t2);
+    let back: ClientSession | null = null;
+    const net2 = new ClientNet(t2, 'H', 'Player A', 'key-of-A', { lobby: () => {}, start: (s) => (back = s), closed: () => {} });
+    for (let i = 0; i < 4; i++) hub.pump();
+    expect(net2.id).toBe('A');
+    expect(back).not.toBeNull();
+    expect(back!.humanId).toBe('A');
+    expect([...session.offline()]).toEqual([]);
+    expect(host.players).toHaveLength(3);
+    // Their input moves the original character again.
+    for (let i = 0; i < 30; i++) {
+      back!.update(1 / 60, { moveX: 1, moveZ: 0, action: false });
+      session.update(1 / 60, NO_INPUT);
+      hub.pump();
+    }
+    const a = session.state.players.find((p) => p.id === 'A')!;
+    expect(a.vel.x).toBeGreaterThan(1);
+    // And they receive the live game state.
+    expect(back!.view().round).toBe(session.state.round);
+  });
+
+  it('refuses strangers once the game has started, and frees places for the next game', () => {
+    const { hub, host, hostT, clients } = setupRoom();
+    host.start('normal', 5);
+    hub.pump();
+    const s = new FakeTransport('S', hub);
+    FakeTransport.connect(hostT, s);
+    let reason: CloseReason | null = null;
+    new ClientNet(s, 'H', 'Stranger', 'key-of-S', { lobby: () => {}, start: () => {}, closed: (r) => (reason = r) });
+    for (let i = 0; i < 4; i++) hub.pump();
+    expect(reason).toBe('started');
+    // B leaves for good; the next game starts without them.
+    clients[1]!.net.leave();
+    hub.pump();
+    hub.pump();
+    const next = host.start('normal', 6);
+    expect(next.state.players.map((p) => p.name)).toEqual(['Host', 'Player A', 'bot_user_1', 'bot_user_2']);
+  });
+
+  it('tells clients when the host leaves', () => {
+    const { hub, host, clients } = setupRoom();
+    host.start('normal', 5);
+    hub.pump();
     host.close();
     hub.pump();
     hub.pump();

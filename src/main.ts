@@ -6,9 +6,10 @@ import { NO_INPUT, type GameEvent, type GameState, type PlayerSetup } from './co
 import { detectLang, getLang, onLangChange, rules, setLang, t, type Lang } from './i18n';
 import { Controls } from './input/controls';
 import { ClientNet, type CloseReason } from './net/client';
-import { BOT_NAMES, HostNet } from './net/host';
+import { botName, HostNet } from './net/host';
 import { MessengerTransport, findBridge } from './net/messenger';
 import { installMockMessenger } from './net/mockMessenger';
+import { chatPlayerKey, claimPlayerKey } from './net/playerKey';
 import { cleanName, type LobbyPlayer } from './net/protocol';
 import { RtcHostTransport, RtcJoinTransport } from './net/rtc/room';
 import { LocalSignaling } from './net/signal/local';
@@ -24,6 +25,8 @@ import { loadSettings, saveSettings } from './ui/settings';
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const params = new URLSearchParams(location.search);
 const HUMAN = 'you';
+/** How long the menu offers to rejoin the last room. */
+const REJOIN_WINDOW_MS = 30 * 60 * 1000;
 
 type Mode = 'menu' | 'lobby' | 'playing' | 'paused' | 'over';
 type Screen = 'menu' | 'howto' | 'pause' | 'gameover' | 'settingsScreen' | 'joinScreen' | 'lobby';
@@ -75,9 +78,13 @@ class App {
     // Updates reload the page, so only apply them while sitting in the main menu.
     initPwa({ isSafeToReload: () => this.mode === 'menu' && !this.net, onInstallChange: () => this.syncInstall() });
     this.syncInstall();
+    this.syncRejoin();
     installMockMessenger(params);
     if (findBridge()) void this.openFromMessenger();
   }
+
+  /** This tab's player key (see net/playerKey.ts). */
+  private readonly playerKey: Promise<string> = claimPlayerKey(this.settings.playerKey);
 
   /** Whether friends can currently reach our room (host with a room code). */
   private relayUp: () => boolean = () => true;
@@ -111,15 +118,14 @@ class App {
   /** Bots playing behind the menus. */
   private startDemo(): void {
     const seed = this.nextSeed();
-    const setups: PlayerSetup[] = BOT_NAMES.slice(0, CONFIG.maxPlayers).map((name, i) => ({ id: `demo${i}`, name, isBot: true }));
+    const setups: PlayerSetup[] = Array.from({ length: CONFIG.maxPlayers }, (_, i) => ({ id: `demo${i}`, name: botName(i + 1), isBot: true }));
     this.setSession(new LocalSession(setups, seed, 'normal', null));
   }
 
   private startLocalGame(): void {
     const seed = this.nextSeed();
     const setups: PlayerSetup[] = [{ id: HUMAN, name: this.name, isBot: false }];
-    const names = BOT_NAMES.filter((n) => n !== this.name);
-    for (let i = 1; setups.length < CONFIG.maxPlayers; i++) setups.push({ id: `bot${i}`, name: names[(seed + i) % names.length]!, isBot: true });
+    for (let i = 1; setups.length < CONFIG.maxPlayers; i++) setups.push({ id: `bot${i}`, name: botName(i), isBot: true });
     this.beginGame(new LocalSession(setups, seed, this.settings.difficulty, HUMAN));
   }
 
@@ -152,7 +158,7 @@ class App {
     const view = this.session.view();
     if (events.length) this.onEvents(view, events);
     this.scene.render(view, running ? dt : 0);
-    if (this.mode === 'playing' || this.mode === 'paused' || this.mode === 'over') this.hud.update(view, this.scene, this.width, this.height);
+    if (this.mode === 'playing' || this.mode === 'paused' || this.mode === 'over') this.hud.update(view, this.scene, this.width, this.height, this.session.offline?.());
     requestAnimationFrame(this.frame);
   };
 
@@ -217,6 +223,9 @@ class App {
       return;
     }
     this.saveName($<HTMLInputElement>('inpJoinName').value);
+    // Remember the room so a player who drops out can come straight back.
+    this.settings.lastRoom = { code, at: Date.now() };
+    saveSettings(this.settings);
     const signaling = makeSignaling(code);
     this.openLobby({ code, isHost: false, status: t('connecting') });
     try {
@@ -235,7 +244,7 @@ class App {
         $('lobbyStatus').textContent = { searching: t('searchingRoom'), connecting: t('roomFound'), retrying: t('retryingRoom') }[stage];
       },
     );
-    const client = new ClientNet(transport, null, this.name, this.clientCallbacks());
+    const client = new ClientNet(transport, null, this.name, await this.playerKey, this.clientCallbacks());
     this.net = { kind: 'client', client, code, messenger: null };
   }
 
@@ -260,7 +269,7 @@ class App {
       this.net = { kind: 'host', host, code: null, messenger: transport };
       this.renderLobby(host.players);
     } else {
-      const client = new ClientNet(transport, init.session.hostId, myName, this.clientCallbacks());
+      const client = new ClientNet(transport, init.session.hostId, myName, chatPlayerKey(init.self.id), this.clientCallbacks());
       this.net = { kind: 'client', client, code: null, messenger: transport };
     }
   }
@@ -282,6 +291,8 @@ class App {
       timeout: t('errTimeout'),
       unreachable: t('errUnreachable'),
     }[reason];
+    // The room is gone or will not take us back: stop offering to rejoin it.
+    if (reason === 'hostLeft' || reason === 'started' || reason === 'full' || reason === 'version' || reason === 'timeout') this.forgetRoom();
     this.net = null;
     if (this.mode === 'lobby') this.lobbyFailed(text);
     else {
@@ -405,7 +416,22 @@ class App {
     this.hud.show(false);
     this.show('menu');
     this.startDemo();
+    this.syncRejoin();
     applyPendingUpdate();
+  }
+
+  /** "Rejoin room ABCDE" in the menu, for a little while after joining a room. */
+  private syncRejoin(): void {
+    const last = this.settings.lastRoom;
+    const fresh = !!last && Date.now() - last.at < REJOIN_WINDOW_MS && params.get('embed') !== 'messenger';
+    $('btnRejoin').hidden = !fresh;
+    if (fresh && last) $('btnRejoin').textContent = t('rejoinRoom', { code: last.code });
+  }
+
+  private forgetRoom(): void {
+    this.settings.lastRoom = null;
+    saveSettings(this.settings);
+    this.syncRejoin();
   }
 
   private syncInstall(): void {
@@ -453,6 +479,7 @@ class App {
     for (const id of ['inpName', 'inpJoinName', 'inpLobbyName']) $<HTMLInputElement>(id).placeholder = t('namePlaceholder');
     document.title = t('title');
     this.syncControls();
+    this.syncRejoin();
     if (this.mode === 'lobby') this.renderLobby(this.lobbyPlayers);
   }
 
@@ -481,6 +508,13 @@ class App {
     on('btnCreate', () => {
       this.notice('');
       void this.createRoom();
+    });
+    on('btnRejoin', () => {
+      const last = this.settings.lastRoom;
+      if (!last) return;
+      this.notice('');
+      $<HTMLInputElement>('inpJoinName').value = this.settings.name;
+      void this.joinRoom(last.code);
     });
     on('btnJoin', () => {
       this.notice('');

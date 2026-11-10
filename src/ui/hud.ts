@@ -117,7 +117,7 @@ export class Hud {
     if (ms > 0) this.bannerTimer = window.setTimeout(() => (this.banner.className = ''), ms);
   }
 
-  update(state: GameState, scene: TrainScene, width: number, height: number): void {
+  update(state: GameState, scene: TrainScene, width: number, height: number, offline: ReadonlySet<string> = new Set()): void {
     // Station board.
     const braking = state.phase === 'riding' && trainAccel(state).x > 0;
     const label =
@@ -141,17 +141,20 @@ export class Hud {
     for (const p of state.players) {
       const chip = this.chips.get(p.id);
       if (chip) {
+        const away = offline.has(p.id) && !p.eliminated;
         chip.classList.toggle('out', p.eliminated);
+        chip.classList.toggle('offline', away);
         chip.classList.toggle('seated', p.seatId !== null && !p.eliminated);
         (chip.querySelector('.name') as HTMLElement).textContent = this.tagText(p, state.time);
-        (chip.querySelector('.state') as HTMLElement).textContent = p.eliminated ? t('out') : p.seatId !== null ? t('seated') : t('standing');
+        (chip.querySelector('.state') as HTMLElement).textContent = p.eliminated ? t('out') : away ? t('offline') : p.seatId !== null ? t('seated') : t('standing');
       }
       const tag = this.tags.get(p.id);
       if (tag) {
         const pos = scene.labelPos(state, p.id, width, height);
         tag.hidden = !pos;
         if (pos) {
-          tag.textContent = this.tagText(p, state.time);
+          tag.textContent = this.tagText(p, state.time) + (offline.has(p.id) ? ' ⚠' : '');
+          tag.classList.toggle('offline', offline.has(p.id));
           tag.style.left = `${pos.x}px`;
           tag.style.top = `${pos.y}px`;
         }

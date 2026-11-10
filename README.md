@@ -12,7 +12,7 @@ Mini game *musical chairs* di kereta komuter. Empat penumpang, kursi selalu kura
 | Mode | Cara |
 |---|---|
 | **Lawan bot** | Offline, 1 pemain + 3 bot |
-| **Buat room / Gabung room** | Sampai 4 HP lewat WebRTC P2P. Host membagikan kode 5 karakter; tempat kosong diisi bot |
+| **Buat room / Gabung room** | Sampai 4 HP lewat WebRTC P2P. Host membagikan kode 5 karakter; tempat kosong diisi bot (`bot_user_1`, `bot_user_2`, …). Pemain yang keluar di tengah game bisa **Gabung lagi** dari menu dan melanjutkan dengan karakternya sendiri |
 | **Di dalam chat app** | Dibuka dari kartu undangan di chat; data lewat koneksi P2P chat. Pasang modul [messenger-sdk/](messenger-sdk/README.md) di chat app (Ionic/Capacitor). Coba [chat demo](https://whiskey34.github.io/dont-take-my-seat/messenger-sdk/demo/index.html), lalu buka tautan teman yang tampil di HP lain |
 
 Detail teknis ada di [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).

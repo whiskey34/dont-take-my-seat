@@ -378,7 +378,19 @@ export class TrainScene {
       const mat = this.cushions[id]?.material as THREE.MeshLambertMaterial | undefined;
       mat?.emissive.set(free ? SCENE.freeMarker : '#000000').multiplyScalar(free ? 0.35 + 0.25 * Math.sin(this.clock * 8) : 0);
       const npc = this.npcs[id];
-      if (npc && seat.playerId !== null) npc.root.visible = false;
+      if (npc && !this.npcAnims.some((a) => a.fig === npc)) {
+        // Match the state even if we missed the events (e.g. joined mid-game):
+        // a seated NPC shows only where the seat is still taken by one.
+        const shouldShow = seat.npc && seat.playerId === null;
+        if (shouldShow && !npc.root.visible) {
+          const sit = seatSitPos(seat);
+          npc.root.position.set(sit.x, 0, sit.z);
+          npc.root.rotation.y = seat.side > 0 ? Math.PI : 0;
+          npc.root.scale.setScalar(1);
+          setSeated(npc, true);
+        }
+        npc.root.visible = shouldShow;
+      }
     });
 
     // NPCs walking out.

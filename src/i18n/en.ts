@@ -104,6 +104,8 @@ export const en = {
   retryingRoom: 'Direct connection failed, trying again…',
   relayDown: 'Lost the matchmaking service, reconnecting… Friends cannot join until it is back.',
   errUnreachable: 'Found the room, but your phones could not connect directly. Try the same Wi-Fi or hotspot, or turn off a VPN.',
+  offline: 'Offline',
+  rejoinRoom: '↩ Rejoin room {code}',
 };
 
 export type Strings = typeof en;
