@@ -102,6 +102,13 @@ intro → riding (kereta jalan, goyang, lalu mengerem)
 - Power-up 🧋 **es kopi** (`boostUntil`): lari 1,4× lebih cepat selama 5 detik.
 - Snapshot multiplayer (sejak protokol **v2**, sekarang **v6**: poin di kolom ke-15, es kopi di kolom ke-16, genangan `pd`) membawa challenge, waktu rem, sisi pintu, posisi penumpang berdiri, power-up, serta status earphone dan pura-pura tidur tiap pemain. Pemain dengan versi game berbeda akan ditolak dengan pesan jelas.
 
+## Tips sekali tampil (`src/ui/tips.ts`)
+
+- Pertama kali sebuah item (es kopi, earphone, pura-pura tidur), challenge, atau aturan (kursi prioritas, kursi cukup untuk semua, kursi makin sedikit, stasiun terakhir) muncul, tampil penjelasan singkat yang menunjuk ke benda itu (lingkaran sorotan).
+- **Lawan bot:** game dijeda (simulasi tidak maju) dan muncul kartu krem dengan tombol *Oke, mengerti!* (Enter/Spasi juga bisa). Kalau ada beberapa tips sekaligus, tampil bergantian.
+- **Multiplayer / chat app:** tidak bisa dijeda, jadi tampil gelembung kecil yang hilang sendiri setelah 2 detik.
+- Tips yang sudah tampil disimpan di pengaturan (`tipsSeen`), jadi tiap tips hanya muncul sekali per perangkat. Tombol *Tampilkan tips lagi* di Pengaturan mengulangnya.
+
 ## Web app (PWA)
 
 - `vite-plugin-pwa` membuat `manifest.webmanifest` (layar penuh, landscape, ikon 192/512/maskable) dan `sw.js` (Workbox) yang menyimpan semua file game untuk offline, termasuk chat demo. Konfigurasinya di `vite.config.ts`.

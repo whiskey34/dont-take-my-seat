@@ -12,6 +12,8 @@ export interface Settings {
   playerKey: string;
   /** The last room joined with a code, for the "Rejoin" button. */
   lastRoom: { code: string; at: number } | null;
+  /** One-time tips already shown on this device. */
+  tipsSeen: string[];
 }
 
 const KEY = 'dtms.settings.v1';
@@ -21,7 +23,7 @@ function newPlayerKey(): string {
   return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
 }
 
-const defaults = (): Settings => ({ lang: null, sound: true, difficulty: 'normal', sensitivity: 3, name: '', playerKey: newPlayerKey(), lastRoom: null });
+const defaults = (): Settings => ({ lang: null, sound: true, difficulty: 'normal', sensitivity: 3, name: '', playerKey: newPlayerKey(), lastRoom: null, tipsSeen: [] });
 
 /** Settings are a convenience: if storage is unavailable we just use defaults. */
 export function loadSettings(): Settings {
@@ -43,6 +45,7 @@ export function loadSettings(): Settings {
         name: typeof v.name === 'string' && v.name.trim() ? cleanName(v.name) : '',
         playerKey: cleanKey(v.playerKey) || newPlayerKey(),
         lastRoom: room && roomCode && Number.isFinite(room.at) ? { code: roomCode, at: Number(room.at) } : null,
+        tipsSeen: Array.isArray(v.tipsSeen) ? v.tipsSeen.filter((x): x is string => typeof x === 'string' && x.length < 30).slice(0, 50) : [],
       };
     }
   } catch {

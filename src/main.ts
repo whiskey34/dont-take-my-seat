@@ -20,6 +20,7 @@ import { PLAYER_COLORS } from './render/palette';
 import { TrainScene } from './render/scene';
 import { LocalSession, type GameSession } from './session/session';
 import { Hud } from './ui/hud';
+import { Tips } from './ui/tips';
 import { applyPendingUpdate, canInstall, initPwa, install, needsIosHint } from './ui/pwa';
 import { loadSettings, saveSettings } from './ui/settings';
 
@@ -50,6 +51,9 @@ function cryptoRandom(): number {
 class App {
   private readonly scene = new TrainScene($<HTMLCanvasElement>('scene'));
   private readonly hud = new Hud();
+  private readonly tipsSeen = new Set<string>();
+  private tips!: Tips;
+  private tipShown = false;
   private readonly controls = new Controls($('stickZone'), $('stickBase'), $('stickKnob'), $('actionBtn'));
   private settings = loadSettings();
   private mode: Mode = 'menu';
@@ -92,6 +96,16 @@ class App {
     this.startDemo();
     requestAnimationFrame(this.frame);
     this.startBackgroundTicker();
+    this.settings.tipsSeen.forEach((id) => this.tipsSeen.add(id));
+    this.tips = new Tips(
+      this.tipsSeen,
+      () => {
+        this.settings.tipsSeen = [...this.tipsSeen];
+        saveSettings(this.settings);
+      },
+      this.scene,
+      () => ({ width: this.width, height: this.height }),
+    );
     window.setInterval(() => void this.updatePing(), 1000);
     // Updates reload the page, so only apply them while sitting in the main menu.
     initPwa({ isSafeToReload: () => this.mode === 'menu' && !this.net, onInstallChange: () => this.syncInstall() });
@@ -157,6 +171,7 @@ class App {
     this.scene.setPlayers(view, s.humanId);
     this.hud.setup(view, s.humanId);
     this.controls.reset();
+    this.tips?.clear();
   }
 
   private beginGame(s: GameSession, resumed = false): void {
@@ -254,10 +269,17 @@ class App {
     const dt = Math.min(0.1, (now - this.last) / 1000);
     this.last = now;
     const networked = this.session.kind !== 'local';
-    const running = !this.isPortrait() || networked ? this.mode !== 'paused' || networked : false;
-    const input = this.mode === 'playing' && !this.isPortrait() ? this.controls.read() : NO_INPUT;
+    // A tip card pauses a solo game until "Got it"; multiplayer cannot pause.
+    const tipPause = this.tips.blocking && !networked;
+    if (this.tips.blocking !== this.tipShown) {
+      this.tipShown = this.tips.blocking;
+      this.controls.reset(); // no stray push from the key or tap that closed the tip
+    }
+    const running = (!this.isPortrait() || networked ? this.mode !== 'paused' || networked : false) && !tipPause;
+    const input = this.mode === 'playing' && !this.isPortrait() && !tipPause ? this.controls.read() : NO_INPUT;
     const events = running ? this.session.update(dt, input) : [];
     const view = this.session.view();
+    if (this.mode === 'playing' && this.session.humanId) this.tips.watch(view, events, this.session.humanId, !networked);
     // Rejoined while on the results screen and the host has already started the next game.
     if (this.resumeAfterOver && this.session instanceof ClientSession && this.session.hasSnapshot && view.phase !== 'gameOver') {
       this.resumeAfterOver = false;
@@ -586,6 +608,7 @@ class App {
 
   private toMenu(): void {
     window.clearInterval(this.nextGameTimer);
+    this.tips.clear();
     this.reconnecting = false;
     this.resumeAfterOver = false;
     this.attempt = null;
@@ -750,6 +773,10 @@ class App {
     on('btnHowToClose', () => this.show('menu'));
     on('btnSettings', () => this.show('settingsScreen'));
     on('btnSettingsClose', () => this.show('menu'));
+    on('btnTipsReset', () => {
+      this.tips.reset();
+      $('btnTipsReset').textContent = t('tipsReset');
+    });
     on('hudPause', () => this.pause());
     on('btnResume', () => this.resume());
     on('btnQuit', () => this.toMenu());

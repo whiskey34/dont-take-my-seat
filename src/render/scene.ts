@@ -574,6 +574,12 @@ export class TrainScene {
     this.camera.updateProjectionMatrix();
   }
 
+  /** Screen position (CSS px) of a point in the car. */
+  project(x: number, y: number, z: number, width: number, height: number): { x: number; y: number } {
+    const v = new THREE.Vector3(x, y, z).project(this.camera);
+    return { x: ((v.x + 1) / 2) * width, y: ((1 - v.y) / 2) * height };
+  }
+
   /** Screen position (CSS px) of a point above a player's head, or null. */
   labelPos(state: GameState, playerId: string, width: number, height: number): { x: number; y: number } | null {
     const v = this.players.get(playerId);
