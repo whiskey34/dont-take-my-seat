@@ -102,10 +102,15 @@ intro → riding (kereta jalan, goyang, lalu mengerem)
 - Power-up 🧋 **es kopi** (`boostUntil`): lari 1,4× lebih cepat selama 5 detik.
 - Snapshot multiplayer (sejak protokol **v2**, sekarang **v7**: poin di kolom ke-15, es kopi ke-16, terpeleset ke-17, genangan `pd`) membawa challenge, waktu rem, sisi pintu, posisi penumpang berdiri, power-up, serta status earphone dan pura-pura tidur tiap pemain. Pemain dengan versi game berbeda akan ditolak dengan pesan jelas.
 
+## Karakter dan animasi
+
+- `src/render/figure.ts`: semua orang (pemain, penumpang duduk dan berdiri, lansia) bergaya chibi bulat: kepala besar dengan mata, alis dan telinga, rambut (ada yang botak), badan bulat, tangan, dan kaki bersepatu. Dibuat langsung dari bentuk dasar Three.js, tanpa file model. Kaki dan tangan berayun saat berjalan (`setStride`); saat duduk kaki ke depan (`setSeated`).
+- Tendangan dari kursi (`seatKick` di `scene.ts`): penendang memutar badan ke samping dan mengayunkan kaki kanan, kilatan merah lembut muncul di titik tendangan, dan yang ditendang melompat keluar dari kursi ke lorong. Murni tampilan, dipicu event yang juga dikirim host ke semua pemain, jadi sama di mode bot dan multiplayer.
+
 ## Tips sekali tampil (`src/ui/tips.ts`)
 
 - Pertama kali sebuah item (es kopi, earphone, pura-pura tidur), challenge, atau aturan (kursi prioritas, kursi cukup untuk semua, kursi makin sedikit, stasiun terakhir) muncul, tampil penjelasan singkat yang menunjuk ke benda itu (lingkaran sorotan).
-- **Lawan bot:** game dijeda (simulasi tidak maju) dan muncul kartu krem dengan tombol *Oke, mengerti!* (Enter/Spasi juga bisa). Kalau ada beberapa tips sekaligus, tampil bergantian.
+- **Lawan bot:** game dijeda diam-diam (simulasi tidak maju, tanpa label) dan muncul kartu krem dengan tombol *Oke, mengerti!* (Enter/Spasi juga bisa). Kalau ada beberapa tips sekaligus, tampil bergantian.
 - **Multiplayer / chat app:** tidak bisa dijeda, jadi tampil gelembung kecil yang hilang sendiri setelah 2 detik.
 - Tips yang sudah tampil disimpan di pengaturan (`tipsSeen`), jadi tiap tips hanya muncul sekali per perangkat. Tombol *Tampilkan tips lagi* di Pengaturan mengulangnya.
 

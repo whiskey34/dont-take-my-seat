@@ -127,7 +127,6 @@ export const en = {
   tipRule: "How it works",
   tipOnce: "This tip shows only once.",
   tipOk: "Got it!",
-  tipPaused: "Time paused",
   showTipsAgain: "Show tips again",
   tipsReset: "Tips will show again",
   tip_coffee_t: "Iced Coffee",

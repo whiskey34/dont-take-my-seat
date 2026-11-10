@@ -1200,20 +1200,6 @@ input:focus-visible {
   font-size: 14px;
 }
 
-/* Next to the pause button, away from the card and its button. */
-#tips .tipPaused {
-  position: absolute;
-  right: calc(60px + var(--safe-r));
-  top: calc(18px + var(--safe-t));
-  padding: 4px 12px;
-  border-radius: 999px;
-  background: var(--accent);
-  color: var(--ink);
-  font-size: 12px;
-  font-weight: 800;
-  white-space: nowrap;
-}
-
 /* Multiplayer: a small bubble that goes away by itself. */
 #tips.bubble .tipRing {
   border-width: 2px;

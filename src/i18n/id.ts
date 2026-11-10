@@ -129,7 +129,6 @@ export const id: Strings = {
   tipRule: "Aturan",
   tipOnce: "Tips ini hanya muncul sekali.",
   tipOk: "Oke, mengerti!",
-  tipPaused: "Waktu dijeda",
   showTipsAgain: "Tampilkan tips lagi",
   tipsReset: "Tips akan muncul lagi",
   tip_coffee_t: "Es Kopi",

@@ -199,8 +199,7 @@ export class Tips {
           <div class="tipHead">${icon}<div><div class="tipKicker">${kicker}</div><div class="tipTitle"></div></div></div>
           <p class="tipBody"></p><p class="tipHint">${t('tipOnce')}</p>
           <button class="tipBtn">${t('tipOk')}</button>
-        </div>
-        <div class="tipPaused">⏸ ${t('tipPaused')}</div>`;
+        </div>`;
       this.root.querySelector('.tipTitle')!.textContent = title;
       this.root.querySelector('.tipBody')!.innerHTML = body; // our own strings, may contain <b>
       const card = this.root.querySelector<HTMLElement>('.tipCard')!;

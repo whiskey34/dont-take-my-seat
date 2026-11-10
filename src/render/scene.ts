@@ -4,7 +4,7 @@ import { CONFIG } from '../core/config';
 import { BENCH_SEGMENTS, createSeats, POLES, seatSitPos } from '../core/layout';
 import { trainAccel } from '../core/game';
 import type { GameEvent, GameState, PowerUpKind, Seat } from '../core/types';
-import { createFigure, setSeated, type Figure } from './figure';
+import { createFigure, setHair, setSeated, setStride, type Figure } from './figure';
 import { PLAYER_COLORS, SCENE } from './palette';
 
 const { car } = CONFIG;
@@ -26,7 +26,14 @@ interface PlayerView {
   ring: THREE.Mesh | null;
   shield: THREE.Mesh;
   visible: number; // 0..1 fade
+  kick: { at: number; dir: THREE.Vector3 } | null; // kicking someone
+  flight: { at: number; from: THREE.Vector3; until: number } | null; // kicked off a seat
 }
+
+/** Seat-kick animation timings (seconds, render clock). */
+const KICK_POSE = 0.42;
+const KICK_FLIGHT = 0.38;
+
 
 /** Owns everything Three.js. Reads game state; never changes it. */
 export class TrainScene {
@@ -42,6 +49,9 @@ export class TrainScene {
   private readonly doors: THREE.Mesh[][] = [];
   private readonly players = new Map<string, PlayerView>();
   private readonly pulses: Array<{ mesh: THREE.Mesh; t: number }> = [];
+  /** Red impact flashes from seat kicks. */
+  private kickGlow: THREE.Texture | null = null;
+  private readonly bursts: Array<{ obj: THREE.Object3D; t: number; vel?: THREE.Vector3; spin?: number; life: number }> = [];
   private backdrop!: THREE.Texture;
   private readonly standers = new Map<number, Figure>();
   private readonly items = new Map<number, THREE.Group>();
@@ -159,7 +169,7 @@ export class TrainScene {
       this.cushions[id] = cushion;
       this.seatInfo[id] = seat;
 
-      const fig = createFigure(SCENE.npcBodies[id % SCENE.npcBodies.length]!, npcSkin(id), false);
+      const fig = createFigure(SCENE.npcBodies[id % SCENE.npcBodies.length]!, npcSkin(id), false, id * 7 + 1);
       this.scene.add(fig.root);
       this.npcs[id] = fig;
 
@@ -275,7 +285,7 @@ export class TrainScene {
     for (const v of this.players.values()) this.scene.remove(v.fig.root);
     this.players.clear();
     for (const p of state.players) {
-      const fig = createFigure(PLAYER_COLORS[p.colorIndex % PLAYER_COLORS.length]!, '#f0c9a4', true);
+      const fig = createFigure(PLAYER_COLORS[p.colorIndex % PLAYER_COLORS.length]!, '#f0c9a4', true, p.colorIndex * 2);
       let ring: THREE.Mesh | null = null;
       if (p.id === humanId) {
         ring = new THREE.Mesh(new THREE.RingGeometry(0.42, 0.52, 28), new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.9, depthWrite: false }));
@@ -294,7 +304,7 @@ export class TrainScene {
       fig.root.position.set(p.pos.x, 0, p.pos.z);
       fig.root.rotation.order = 'YXZ'; // lean follows the facing direction
       this.scene.add(fig.root);
-      this.players.set(p.id, { fig, ring, shield, visible: 1 });
+      this.players.set(p.id, { fig, ring, shield, visible: 1, kick: null, flight: null });
     }
   }
 
@@ -309,7 +319,7 @@ export class TrainScene {
         if (fig) {
           fig.root.visible = true;
           fig.root.scale.setScalar(1);
-          (fig.head.material as THREE.MeshLambertMaterial).color.set(SCENE.elderHair);
+          setHair(fig, SCENE.elderHair);
         }
       }
       if (e.type === 'pushed') {
@@ -320,11 +330,7 @@ export class TrainScene {
         const who = state.players.find((p) => p.id === e.playerId);
         if (who) this.pulse(who.pos.x, who.pos.z, SCENE.puddle);
       }
-      if (e.type === 'seatKick') {
-        const target = state.players.find((p) => p.id === e.target);
-        if (target) this.pulse(target.pos.x, target.pos.z, SCENE.kick);
-        this.shake = Math.max(this.shake, 0.25);
-      }
+      if (e.type === 'seatKick') this.seatKick(state, e.by, e.target, e.seatId);
       if (e.type === 'sat') {
         const p = state.players.find((q) => q.id === e.playerId);
         if (p) this.pulse(p.pos.x, p.pos.z, SCENE.freeMarker);
@@ -362,6 +368,80 @@ export class TrainScene {
     this.npcAnims.push({ fig, from, to: new THREE.Vector3(door, 0, -WALL_Z - 0.2), t: 0 });
   }
 
+  /**
+   * Seat kick: the kicker swings a leg at the seat, a red flash pops where it
+   * lands, and the victim is knocked out of the seat into the aisle.
+   */
+  private seatKick(state: GameState, by: string, target: string, seatId: number): void {
+    const seat = state.seats[seatId];
+    const kicker = this.players.get(by);
+    const victim = this.players.get(target);
+    if (!seat) return;
+    const sit = seatSitPos(seat);
+    const at = new THREE.Vector3(sit.x, 0.7, sit.z - seat.side * 0.3);
+    if (kicker) {
+      const dir = at.clone().sub(kicker.fig.root.position).setY(0);
+      kicker.kick = { at: this.clock, dir: dir.lengthSq() > 0 ? dir.normalize() : new THREE.Vector3(0, 0, seat.side) };
+    }
+    if (victim) {
+      victim.flight = { at: this.clock, from: new THREE.Vector3(sit.x, 0.2, sit.z), until: this.clock + KICK_FLIGHT };
+      victim.fig.root.position.set(sit.x, 0.2, sit.z);
+    }
+    this.burst(at);
+    this.pulse(sit.x, sit.z - seat.side * 0.4, SCENE.kick);
+    this.shake = Math.max(this.shake, 0.3);
+  }
+
+  /** A soft red glow that pops and fades behind the hit. */
+  private burst(at: THREE.Vector3): void {
+    if (!this.kickGlow) {
+      const c = document.createElement('canvas');
+      c.width = c.height = 128;
+      const g = c.getContext('2d');
+      if (g) {
+        const grad = g.createRadialGradient(64, 64, 4, 64, 64, 64);
+        grad.addColorStop(0, 'rgba(255,90,78,0.95)');
+        grad.addColorStop(0.45, 'rgba(255,60,50,0.55)');
+        grad.addColorStop(1, 'rgba(255,40,40,0)');
+        g.fillStyle = grad;
+        g.fillRect(0, 0, 128, 128);
+      }
+      this.kickGlow = new THREE.CanvasTexture(c);
+      this.kickGlow.colorSpace = THREE.SRGBColorSpace;
+    }
+    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.kickGlow, transparent: true, depthWrite: false, blending: THREE.NormalBlending }));
+    sprite.position.copy(at);
+    sprite.renderOrder = 5;
+    this.scene.add(sprite);
+    this.bursts.push({ obj: sprite, t: 0, life: 0.4 });
+  }
+
+  private updateBursts(dt: number): void {
+    for (let i = this.bursts.length - 1; i >= 0; i--) {
+      const b = this.bursts[i]!;
+      b.t += dt;
+      const u = b.t / b.life;
+      if (b.vel) {
+        b.vel.y -= 9 * dt;
+        b.obj.position.addScaledVector(b.vel, dt);
+        b.obj.rotation.x += (b.spin ?? 0) * dt;
+        b.obj.rotation.y += (b.spin ?? 0) * dt;
+        b.obj.scale.setScalar(Math.max(0.01, 1 - u));
+      } else {
+        // Pops out fast, then fades.
+        const size = 0.6 + 1.6 * Math.min(1, u / 0.3);
+        b.obj.scale.set(size, size, 1);
+        ((b.obj as THREE.Sprite).material as THREE.SpriteMaterial).opacity = u < 0.35 ? 1 : 1 - (u - 0.35) / 0.65;
+      }
+      if (u >= 1) {
+        this.scene.remove(b.obj);
+        if (b.obj instanceof THREE.Mesh) b.obj.geometry.dispose();
+        if (b.obj instanceof THREE.Sprite) b.obj.material.dispose();
+        this.bursts.splice(i, 1);
+      }
+    }
+  }
+
   private pulse(x: number, z: number, color: string): void {
     const mesh = new THREE.Mesh(new THREE.RingGeometry(0.3, 0.4, 24), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.9, depthWrite: false }));
     mesh.rotation.x = -Math.PI / 2;
@@ -386,18 +466,21 @@ export class TrainScene {
       const speed = p.seatId === null ? Math.hypot(p.vel.x, p.vel.z) : 0;
       const stride = Math.min(1, speed / CONFIG.player.speed);
       r.position.set(p.pos.x, Math.abs(Math.sin(this.clock * 13)) * 0.05 * stride, p.pos.z);
-      r.rotation.x = 0.12 * stride;
+      r.rotation.x = 0.08 * stride;
+      setStride(v.fig, this.clock * 13, stride);
       let dy = p.facing - r.rotation.y;
       dy = Math.atan2(Math.sin(dy), Math.cos(dy));
       r.rotation.y += dy * turn;
       setSeated(v.fig, p.seatId !== null);
       const stunned = state.time < p.stunnedUntil;
       r.rotation.z = stunned ? Math.sin(this.clock * 40) * 0.15 : 0;
+      this.animateKick(v, p);
       if (v.ring) v.ring.visible = p.seatId === null;
       v.shield.visible = state.time < p.shieldUntil && !p.eliminated;
       if (v.shield.visible) v.shield.rotation.z += dt * 3;
     }
 
+    this.updateBursts(dt);
     this.syncStanders(state, dt);
     this.syncItems(state);
     this.syncPuddles(state);
@@ -436,6 +519,7 @@ export class TrainScene {
       a.t += dt / 0.9;
       const t = Math.min(1, a.t);
       a.fig.root.position.lerpVectors(a.from, a.to, t);
+      setStride(a.fig, this.clock * 12, 1);
       a.fig.root.rotation.y = Math.atan2(a.to.x - a.from.x, a.to.z - a.from.z);
       a.fig.root.scale.setScalar(t > 0.7 ? 1 - (t - 0.7) / 0.3 : 1);
       if (t >= 1) {
@@ -491,7 +575,7 @@ export class TrainScene {
       seen.add(st.id);
       let fig = this.standers.get(st.id);
       if (!fig) {
-        fig = createFigure(SCENE.npcBodies[st.id % SCENE.npcBodies.length]!, npcSkin(st.id + 3), st.id % 2 === 0);
+        fig = createFigure(SCENE.npcBodies[st.id % SCENE.npcBodies.length]!, npcSkin(st.id + 3), st.id % 2 === 0, st.id * 3 + 2);
         fig.root.position.set(st.pos.x, 0, st.pos.z);
         this.scene.add(fig.root);
         this.standers.set(st.id, fig);
@@ -502,6 +586,7 @@ export class TrainScene {
       if (Math.hypot(dx, dz) > 0.002) r.rotation.y = Math.atan2(dx, dz);
       r.position.x += dx * k;
       r.position.z += dz * k;
+      setStride(fig, this.clock * 11 + st.id, Math.min(1, (Math.hypot(dx, dz) * k) / (dt * 1.2 || 1)));
     }
     for (const [id, fig] of this.standers) {
       if (seen.has(id)) continue;
@@ -576,6 +661,38 @@ export class TrainScene {
     this.camera.lookAt(this.camTarget);
     this.camBase.copy(this.camera.position);
     this.camera.updateProjectionMatrix();
+  }
+
+  /** Kicker swings the right leg; the victim hops out of the seat. */
+  private animateKick(v: PlayerView, p: GameState['players'][number]): void {
+    const r = v.fig.root;
+    if (v.kick) {
+      const u = (this.clock - v.kick.at) / KICK_POSE;
+      if (u >= 1) v.kick = null;
+      else {
+        // Quick wind-up back, then a big swing forward and up.
+        const swing = u < 0.25 ? -0.5 * (u / 0.25) : -0.5 + 2.2 * Math.sin(((u - 0.25) / 0.75) * Math.PI);
+        r.position.addScaledVector(v.kick.dir, 0.18 * Math.max(0, Math.sin(Math.PI * u)));
+        r.rotation.x = -0.25 * Math.max(0, swing / 1.7); // lean back as the leg goes up
+        r.rotation.y += 0.7 * Math.sin(Math.PI * u); // turn side-on so the kick reads from the camera
+        v.fig.legs[1].rotation.x = -Math.max(-0.5, swing);
+        v.fig.legs[0].rotation.x = 0.15;
+        v.fig.arms[0].rotation.x = -0.6 * Math.max(0, swing / 1.7);
+        v.fig.arms[1].rotation.x = 0.5 * Math.max(0, swing / 1.7);
+      }
+    }
+    if (v.flight) {
+      const u = (this.clock - v.flight.at) / KICK_FLIGHT;
+      if (u >= 1) v.flight = null;
+      else {
+        const to = new THREE.Vector3(p.pos.x, 0, p.pos.z);
+        r.position.lerpVectors(v.flight.from, to, 1 - (1 - u) * (1 - u));
+        r.position.y = v.flight.from.y * (1 - u) + Math.sin(Math.PI * u) * 0.35;
+        setSeated(v.fig, false);
+        setStride(v.fig, 0, 0);
+        v.fig.arms[0].rotation.x = v.fig.arms[1].rotation.x = -1.4 * Math.sin(Math.PI * u); // arms flung up
+      }
+    }
   }
 
   /** Screen position (CSS px) of a point in the car. */
