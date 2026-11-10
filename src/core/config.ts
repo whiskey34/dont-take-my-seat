@@ -54,6 +54,20 @@ export const CONFIG = {
     boardingCount: 3,
     standerRadius: 0.3,
     standerSpeed: 0.8,
+    // Kick fight: kick a seated player off their seat (from in front of it).
+    kickRange: 0.85,
+    kickStun: 0.9,
+    kickCooldown: 2,
+    // Wet floor: how quickly you can change direction inside a puddle (normal is 12).
+    puddleCount: 3,
+    puddleRadius: [0.6, 0.9],
+    puddleGrip: 1.6,
+  },
+
+  points: {
+    round: 10, // seated when the doors close
+    win: 50,
+    kick: 5, // kicked someone off a seat
   },
 
   powerUp: {

@@ -1,5 +1,5 @@
 import { CONFIG } from '../core/config';
-import { pushTarget, seatInReach, trainAccel } from '../core/game';
+import { pushTarget, seatInReach, seatKickTarget, trainAccel } from '../core/game';
 import type { GameEvent, GameState, Player } from '../core/types';
 import { t } from '../i18n';
 import { PLAYER_COLORS } from '../render/palette';
@@ -49,7 +49,7 @@ export class Hud {
       const color = PLAYER_COLORS[p.colorIndex % PLAYER_COLORS.length]!;
       const chip = document.createElement('div');
       chip.className = 'chip';
-      chip.innerHTML = '<span class="dot"></span><span class="name"></span><span class="state"></span>';
+      chip.innerHTML = '<span class="dot"></span><span class="name"></span><span class="pts"></span><span class="state"></span>';
       (chip.querySelector('.dot') as HTMLElement).style.background = color;
       this.roster.append(chip);
       this.chips.set(p.id, chip);
@@ -101,6 +101,22 @@ export class Hud {
         case 'slept':
           if (e.playerId === me) this.flash(t('sleptSafe'), 'good', 1600);
           break;
+        case 'seatKick': {
+          const name = (id: string) => state.players.find((p) => p.id === id)?.name ?? id;
+          if (e.by === me) this.flash(t('youKicked', { name: name(e.target), n: CONFIG.points.kick }), 'good', 1600);
+          else if (e.target === me) this.flash(t('gotKicked', { name: name(e.by) }), 'bad', 1600);
+          break;
+        }
+        case 'points': {
+          const chip = this.chips.get(e.playerId);
+          const pts = chip?.querySelector<HTMLElement>('.pts');
+          if (pts) {
+            pts.classList.remove('bump');
+            void pts.offsetWidth; // restart the animation
+            pts.classList.add('bump');
+          }
+          break;
+        }
         case 'replay':
           this.flash(t('replay'), 'plain', 2000);
           break;
@@ -146,6 +162,7 @@ export class Hud {
         chip.classList.toggle('offline', away);
         chip.classList.toggle('seated', p.seatId !== null && !p.eliminated);
         (chip.querySelector('.name') as HTMLElement).textContent = this.tagText(p, state.time);
+        (chip.querySelector('.pts') as HTMLElement).textContent = String(p.score);
         (chip.querySelector('.state') as HTMLElement).textContent = p.eliminated ? t('out') : away ? t('offline') : p.seatId !== null ? t('seated') : t('standing');
       }
       const tag = this.tags.get(p.id);
@@ -180,11 +197,14 @@ export class Hud {
     this.actionBtn.classList.toggle('hidden', !active);
     if (!me || !active) return;
     const canSit = !!seatInReach(state, me);
+    const canKick = !canSit && !!seatKickTarget(state, me);
     this.actionBtn.classList.toggle('sit', canSit);
-    this.actionLabel.textContent = canSit ? t('sit') : t('push');
-    const cooldownLeft = Math.max(0, me.pushReadyAt - state.time) / CONFIG.push.cooldown;
+    this.actionBtn.classList.toggle('kick', canKick);
+    this.actionLabel.textContent = canSit ? t('sit') : canKick || state.challenge === 'kickFight' ? t('kick') : t('push');
+    const full = me.pushReadyAt - state.time > CONFIG.push.cooldown ? CONFIG.challenge.kickCooldown : CONFIG.push.cooldown;
+    const cooldownLeft = Math.max(0, me.pushReadyAt - state.time) / full;
     const cooling = !canSit && cooldownLeft > 0;
-    this.actionBtn.classList.toggle('cooling', cooling || (!canSit && !pushTarget(state, me)));
+    this.actionBtn.classList.toggle('cooling', cooling || (!canSit && !canKick && !pushTarget(state, me)));
     if (this.actionRing) this.actionRing.style.strokeDashoffset = String(289 * (1 - (cooling ? cooldownLeft : 0)));
   }
 }
@@ -198,6 +218,10 @@ export function challengeText(state: GameState): string {
       return t('chCrowd');
     case 'oneSideDoors':
       return state.doorSide === -1 ? t('chDoorsLeft') : t('chDoorsRight');
+    case 'kickFight':
+      return t('chKick');
+    case 'puddles':
+      return t('chPuddles');
     default:
       return '';
   }

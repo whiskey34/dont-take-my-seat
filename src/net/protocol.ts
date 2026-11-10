@@ -1,7 +1,7 @@
 import { CHALLENGE_KINDS, POWER_UP_KINDS, type ChallengeKind, type GameEvent, type GameState, type Phase, type Player, type PlayerSetup, type PowerUpKind, type Seat } from '../core/types';
 
 /** Bump when messages change incompatibly; peers with another version are refused. */
-export const PROTOCOL_VERSION = 4;
+export const PROTOCOL_VERSION = 5;
 export const MAX_NAME = 14;
 
 export interface LobbyPlayer {
@@ -41,8 +41,10 @@ export interface Snapshot {
   free: number[];
   trap: number;
   winner: string;
-  /** [id, x, z, vx, vz, facing, seat, eliminated, elimRound, stunnedUntil, pushReadyAt, kickAt, shieldUntil, sleeping] */
-  p: Array<[string, number, number, number, number, number, number, 0 | 1, number, number, number, number, number, 0 | 1]>;
+  /** [id, x, z, vx, vz, facing, seat, eliminated, elimRound, stunnedUntil, pushReadyAt, kickAt, shieldUntil, sleeping, score] */
+  p: Array<[string, number, number, number, number, number, number, 0 | 1, number, number, number, number, number, 0 | 1, number]>;
+  /** Puddles [x, z, r] (wet floor challenge). */
+  pd: Array<[number, number, number]>;
   /** Challenge of this stop ('' none), sudden-brake end time, open door side. */
   ch: ChallengeKind | '';
   bk: number;
@@ -89,7 +91,9 @@ export function packSnapshot(s: GameState, offline: Iterable<string> = [], acks:
       p.kickAt === null ? -1 : r3(p.kickAt),
       r3(p.shieldUntil),
       p.sleeping ? 1 : 0,
+      p.score,
     ]),
+    pd: s.puddles.map((d) => [r3(d.x), r3(d.z), r3(d.r)]),
     ch: s.challenge ?? '',
     bk: r3(s.brakeUntil),
     ds: s.doorSide,
@@ -129,6 +133,7 @@ export function applySnapshot(s: GameState, snap: Snapshot): void {
   // Standers only need a position on clients; their next move comes from the host.
   s.standers = snap.st.map(([id, x, z]) => ({ id, pos: { x, z }, target: { x, z }, moveAt: Infinity }));
   s.powerUps = snap.pu.map(([id, kind, x, z]) => ({ id, kind, pos: { x, z } }));
+  s.puddles = snap.pd.map(([x, z, r]) => ({ x, z, r }));
 }
 
 export function applyPlayerRow(p: Player, row: Snapshot['p'][number]): void {
@@ -143,6 +148,7 @@ export function applyPlayerRow(p: Player, row: Snapshot['p'][number]): void {
   p.kickAt = row[11] >= 0 ? row[11] : null;
   p.shieldUntil = row[12];
   p.sleeping = row[13] === 1;
+  p.score = row[14];
 }
 
 // --------------------------------------------------------------- validation
@@ -209,7 +215,12 @@ export function parseHostMsg(data: string): HostMsg | null {
     case 'start': {
       if (!isInt(m.seed) || !Array.isArray(m.players) || m.players.length < 2 || m.players.length > 4) return null;
       if (!m.players.every((p) => isObj(p) && isStr(p.id) && typeof p.isBot === 'boolean')) return null;
-      const players = (m.players as Array<Record<string, unknown>>).map((p) => ({ id: String(p.id), name: cleanName(p.name), isBot: p.isBot === true }));
+      const players = (m.players as Array<Record<string, unknown>>).map((p) => ({
+        id: String(p.id),
+        name: cleanName(p.name),
+        isBot: p.isBot === true,
+        score: isInt(p.score) && p.score >= 0 ? p.score : 0,
+      }));
       return { t: 'start', seed: m.seed, players, difficulty: m.difficulty === 'easy' ? 'easy' : 'normal' };
     }
     case 'snap':
@@ -229,11 +240,12 @@ function isSnapshot(v: unknown): v is Snapshot {
   if (!Array.isArray(v.free) || !v.free.every(isInt) || !isInt(v.trap) || !isStr(v.winner)) return false;
   if (typeof v.npc !== 'string' || v.npc.length > 200 || !Array.isArray(v.occ) || !Array.isArray(v.p) || v.p.length > 4) return false;
   if (!v.occ.every((o) => Array.isArray(o) && o.length === 2 && isInt(o[0]) && isStr(o[1]))) return false;
-  if (!v.p.every((row) => Array.isArray(row) && row.length === 14 && isStr(row[0]) && row.slice(1).every(isNum))) return false;
+  if (!v.p.every((row) => Array.isArray(row) && row.length === 15 && isStr(row[0]) && row.slice(1).every(isNum))) return false;
   if (v.ch !== '' && !CHALLENGE_KINDS.includes(v.ch as ChallengeKind)) return false;
   if (!isNum(v.bk) || (v.ds !== -1 && v.ds !== 0 && v.ds !== 1)) return false;
   if (!Array.isArray(v.st) || v.st.length > 12 || !v.st.every((r) => Array.isArray(r) && r.length === 3 && r.every(isNum))) return false;
   if (!Array.isArray(v.off) || v.off.length > 4 || !v.off.every((x) => isStr(x))) return false;
+  if (!Array.isArray(v.pd) || v.pd.length > 8 || !v.pd.every((r) => Array.isArray(r) && r.length === 3 && r.every(isNum))) return false;
   if (!Array.isArray(v.ack) || v.ack.length > 4 || !v.ack.every((a) => Array.isArray(a) && a.length === 2 && isStr(a[0]) && isInt(a[1]))) return false;
   return (
     Array.isArray(v.pu) &&
@@ -254,6 +266,10 @@ function isEvent(e: unknown): e is GameEvent {
       return isStr(e.playerId) && isInt(e.seatId);
     case 'pushed':
       return isStr(e.by) && isStr(e.target);
+    case 'seatKick':
+      return isStr(e.by) && isStr(e.target) && isInt(e.seatId);
+    case 'points':
+      return isStr(e.playerId) && isInt(e.amount) && (e.reason === 'round' || e.reason === 'win' || e.reason === 'kick');
     case 'eliminated':
       return Array.isArray(e.playerIds) && e.playerIds.every((x) => isStr(x));
     case 'replay':

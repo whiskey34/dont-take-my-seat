@@ -36,7 +36,7 @@ describe('station challenges', () => {
       expect(s.challenge).not.toBeNull();
       seen.add(s.challenge!);
     }
-    expect([...seen].sort()).toEqual(['crowd', 'oneSideDoors', 'suddenBrake']);
+    expect([...seen].sort()).toEqual(['crowd', 'kickFight', 'oneSideDoors', 'puddles', 'suddenBrake']);
   });
 
   it('sudden brake throws forward and trips whoever stands still', () => {
@@ -86,6 +86,93 @@ describe('station challenges', () => {
     runUntil(s, (x) => x.phase === 'riding' && x.round === 1);
     expect(s.standers.every((st) => st.id > 0)).toBe(true);
     if (s.challenge !== 'crowd') expect(s.standers).toHaveLength(0);
+  });
+});
+
+describe('kick fight and wet floor', () => {
+  it('kick fight: a standing player kicks a seated one off and takes the seat', () => {
+    const s = gameWith('kickFight');
+    runUntil(s, (x) => x.phase === 'scramble');
+    const [a, b] = s.players;
+    const seat = s.seats[s.freeSeatIds[0]!]!;
+    // a sits; b walks up to the seat and kicks.
+    a!.pos = seatFront(seat);
+    step(s, new Map([['a', press]]), DT);
+    expect(a!.seatId).toBe(seat.id);
+    b!.pos = { ...seatFront(seat) };
+    b!.pushReadyAt = 0;
+    const ev = step(s, new Map([['b', press]]), DT);
+    expect(ev).toContainEqual({ type: 'seatKick', by: 'b', target: 'a', seatId: seat.id });
+    expect(ev).toContainEqual({ type: 'points', playerId: 'b', amount: CONFIG.points.kick, reason: 'kick' });
+    expect(a!.seatId).toBeNull();
+    expect(s.time < a!.stunnedUntil).toBe(true);
+    expect(seat.playerId).toBeNull();
+    step(s, new Map([['b', press]]), DT);
+    expect(b!.seatId).toBe(seat.id);
+    // The scramble does not end early while seats can still change hands.
+    for (const p of s.players) {
+      const free = s.seats.find((x) => !x.npc && x.playerId === null && !x.priority);
+      if (p.seatId === null && free) {
+        p.pos = seatFront(free);
+        step(s, new Map([[p.id, press]]), DT);
+      }
+    }
+    expect(s.phase).toBe('scramble');
+  });
+
+  it('no kicking off seats outside a kick fight', () => {
+    const s = gameWith('crowd');
+    runUntil(s, (x) => x.phase === 'scramble');
+    const [a, b] = s.players;
+    const seat = s.seats[s.freeSeatIds[0]!]!;
+    a!.pos = seatFront(seat);
+    step(s, new Map([['a', press]]), DT);
+    b!.pos = { ...seatFront(seat) };
+    const ev = step(s, new Map([['b', press]]), DT);
+    expect(ev.some((e) => e.type === 'seatKick')).toBe(false);
+    expect(a!.seatId).toBe(seat.id);
+  });
+
+  it('puddles make you slide: you cannot stop or turn quickly on wet floor', () => {
+    const s = gameWith('puddles');
+    expect(s.puddles).toHaveLength(CONFIG.challenge.puddleCount);
+    const run = (wet: boolean) => {
+      const g = structuredClone(s);
+      const d = g.puddles[0]!;
+      if (!wet) g.puddles = [];
+      g.phaseEndsAt = Infinity; // freeze the phase, no sway effects on x
+      const a = g.players[0]!;
+      a.pos = { x: d.x, z: d.z };
+      a.vel = { x: 4, z: 0 };
+      for (let i = 0; i < 6; i++) step(g, new Map([['a', { moveX: -1, moveZ: 0, action: false }]]), DT);
+      return a.vel.x;
+    };
+    expect(run(false)).toBeLessThan(0); // dry: already turned around
+    expect(run(true)).toBeGreaterThan(2.5); // wet: still sliding the old way
+  });
+});
+
+describe('points', () => {
+  it('scores rounds survived, the win and kicks; and carries over from the last game', () => {
+    const setups = four.map((p, i) => ({ ...p, score: i === 0 ? 120 : 0 }));
+    const s = createGame(setups, 9);
+    expect(s.players[0]!.score).toBe(120);
+    const brains = new Map(s.players.map((p, i) => [p.id, createBrain(i + 1)]));
+    const ev: GameEvent[] = [];
+    for (let i = 0; i < 60 * 600 && s.phase !== 'gameOver'; i++) {
+      const inputs = new Map(s.players.map((p) => [p.id, botThink(s, p, brains.get(p.id)!, DT)]));
+      ev.push(...step(s, inputs, DT));
+    }
+    expect(s.phase).toBe('gameOver');
+    for (const p of s.players) {
+      const earned = ev.filter((e) => e.type === 'points' && e.playerId === p.id).reduce((n, e) => n + (e.type === 'points' ? e.amount : 0), 0);
+      expect(p.score).toBe((p.id === 'a' ? 120 : 0) + earned);
+    }
+    const winner = s.players.find((p) => p.id === s.winnerId)!;
+    expect(ev).toContainEqual({ type: 'points', playerId: winner.id, amount: CONFIG.points.win, reason: 'win' });
+    // Survived every round: 3 rounds for 4 players (no replays counted twice).
+    const rounds = ev.filter((e) => e.type === 'points' && e.playerId === winner.id && e.reason === 'round').length;
+    expect(rounds).toBeGreaterThanOrEqual(3);
   });
 });
 

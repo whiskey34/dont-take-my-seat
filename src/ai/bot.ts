@@ -1,5 +1,5 @@
 import { CONFIG } from '../core/config';
-import { dist, pushTarget, seatInReach } from '../core/game';
+import { dist, findSeat, pushTarget, seatInReach, seatKickTarget } from '../core/game';
 import { seatFront } from '../core/layout';
 import type { GameState, Player, PlayerInput, Seat, Vec2 } from '../core/types';
 import { NO_INPUT } from '../core/types';
@@ -71,7 +71,15 @@ export function botThink(s: GameState, me: Player, b: BotBrain, dt: number): Pla
   if (s.time - b.scrambleSeenAt < b.reaction) return NO_INPUT;
 
   const target = chooseSeat(s, me, b);
-  if (!target) return { ...NO_INPUT, action: maybePush(s, me, b, dt, 1) };
+  if (!target) {
+    // Kick fight: no seat left, so go and kick someone off theirs.
+    if (s.challenge === 'kickFight') {
+      if (seatKickTarget(s, me)) return { moveX: 0, moveZ: 0, action: s.time >= me.pushReadyAt && rand(b) < b.aggression * 8 * dt };
+      const victim = nearestSeated(s, me);
+      if (victim) return steer(s, me, seatFront(victim), b.speed, maybePush(s, me, b, dt, 0.5));
+    }
+    return { ...NO_INPUT, action: maybePush(s, me, b, dt, 1) };
+  }
 
   if (seatInReach(s, me)?.id === target.id) return { moveX: 0, moveZ: 0, action: true };
 
@@ -110,6 +118,21 @@ function chooseSeat(s: GameState, me: Player, b: BotBrain): Seat | undefined {
     }
   }
   b.targetSeatId = best?.id ?? null;
+  return best;
+}
+
+function nearestSeated(s: GameState, me: Player): Seat | undefined {
+  let best: Seat | undefined;
+  let bestD = Infinity;
+  for (const o of s.players) {
+    const seat = o === me || o.eliminated ? undefined : findSeat(s, o.seatId);
+    if (!seat) continue;
+    const d = dist(me.pos, seatFront(seat));
+    if (d < bestD) {
+      best = seat;
+      bestD = d;
+    }
+  }
   return best;
 }
 

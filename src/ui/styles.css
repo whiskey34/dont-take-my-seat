@@ -111,6 +111,28 @@ button {
   color: var(--muted);
 }
 
+.chip .pts {
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--accent);
+}
+
+.chip .pts + .state {
+  margin-left: 2px;
+}
+
+.chip .pts.bump {
+  animation: pts-bump 0.6s ease-out;
+}
+
+@keyframes pts-bump {
+  0% { transform: scale(1); color: var(--sit); }
+  30% { transform: scale(1.45); color: var(--sit); }
+  100% { transform: scale(1); }
+}
+
 .chip.seated .state {
   color: var(--sit);
 }
@@ -347,6 +369,11 @@ button {
   animation: throb 0.6s ease-in-out infinite alternate;
 }
 
+#actionBtn.kick {
+  background: var(--danger);
+  animation: throb 0.6s ease-in-out infinite alternate;
+}
+
 #actionBtn.pressed {
   transform: translateY(4px);
   box-shadow: 0 2px 0 rgba(0, 0, 0, 0.22), 0 4px 10px rgba(0, 0, 0, 0.2);
@@ -531,7 +558,32 @@ h2 {
   line-height: 1.35;
 }
 
-#standings li span {
+#standings li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+#standings li .pts {
+  margin-left: auto;
+  width: auto;
+  height: auto;
+  border-radius: 0;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+#standings li .gain {
+  width: auto;
+  height: auto;
+  border-radius: 0;
+  margin-right: 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--sit);
+}
+
+#standings li span.dot {
   display: inline-block;
   width: 10px;
   height: 10px;

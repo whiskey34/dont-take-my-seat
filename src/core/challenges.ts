@@ -8,6 +8,8 @@ import { CHALLENGE_KINDS, POWER_UP_KINDS, type GameEvent, type GameState, type P
  * - suddenBrake: the train jerks once while riding; whoever stands still stumbles.
  * - crowd: standing passengers drift around the aisle and block the way.
  * - oneSideDoors: only one side's doors open; new passengers board there and block it.
+ * - kickFight: the action button can kick a seated player off their seat.
+ * - puddles: wet patches on the floor; you slide when you run through them.
  * One power-up lies on the floor every stop.
  */
 const C = CONFIG.challenge;
@@ -29,6 +31,7 @@ export function startChallenge(s: GameState, events: GameEvent[]): void {
   s.brakeAt = null;
   s.brakeUntil = 0;
   s.doorSide = 0;
+  s.puddles = [];
   const kind = CHALLENGE_KINDS[Math.floor(rand(s) * CHALLENGE_KINDS.length)] ?? 'suddenBrake';
   s.challenge = kind;
   if (kind === 'suddenBrake') s.brakeAt = s.time + between(s, C.brakeWindow[0], C.brakeWindow[1]);
@@ -40,6 +43,14 @@ export function startChallenge(s: GameState, events: GameEvent[]): void {
     }
   }
   if (kind === 'oneSideDoors') s.doorSide = rand(s) < 0.5 ? -1 : 1;
+  if (kind === 'puddles') {
+    for (let i = 0; i < C.puddleCount; i++) {
+      // One puddle in each part of the car, so every route crosses some wet floor.
+      const span = (car.halfLength * 2 - 4) / C.puddleCount;
+      const x = -car.halfLength + 2 + span * (i + 0.5) + between(s, -span * 0.3, span * 0.3);
+      s.puddles.push({ x, z: between(s, -0.7, 0.7), r: between(s, C.puddleRadius[0], C.puddleRadius[1]) });
+    }
+  }
   spawnPowerUp(s);
   events.push({ type: 'challenge', kind });
 }

@@ -27,6 +27,8 @@ const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as 
 const params = new URLSearchParams(location.search);
 const HUMAN = 'you';
 /** How long the menu offers to rejoin the last room. */
+/** Seconds on the game-over screen before the next game starts by itself. */
+const NEXT_GAME_DELAY_S = 8;
 const REJOIN_WINDOW_MS = 30 * 60 * 1000;
 
 type Mode = 'menu' | 'lobby' | 'playing' | 'paused' | 'over';
@@ -55,6 +57,10 @@ class App {
   private net: Net | null = null;
   private lobbyPlayers: LobbyPlayer[] = [];
   private last = performance.now();
+  /** Games played in a row in this session, and everyone's points when this one began. */
+  private gameNo = 1;
+  private startScores = new Map<string, number>();
+  private nextGameTimer = 0;
   private width = 1;
   private height = 1;
   private seed = (Date.now() & 0x7fffffff) | 1;
@@ -123,10 +129,13 @@ class App {
     this.setSession(new LocalSession(setups, seed, 'normal', null));
   }
 
-  private startLocalGame(): void {
+  private startLocalGame(scores: ReadonlyMap<string, number> = new Map()): void {
     const seed = this.nextSeed();
-    const setups: PlayerSetup[] = [{ id: HUMAN, name: this.name, isBot: false }];
-    for (let i = 1; setups.length < CONFIG.maxPlayers; i++) setups.push({ id: `bot${i}`, name: botName(i), isBot: true });
+    const setups: PlayerSetup[] = [{ id: HUMAN, name: this.name, isBot: false, score: scores.get(HUMAN) ?? 0 }];
+    for (let i = 1; setups.length < CONFIG.maxPlayers; i++) {
+      const id = `bot${i}`;
+      setups.push({ id, name: botName(i), isBot: true, score: scores.get(id) ?? 0 });
+    }
     this.beginGame(new LocalSession(setups, seed, this.settings.difficulty, HUMAN));
   }
 
@@ -140,6 +149,10 @@ class App {
   }
 
   private beginGame(s: GameSession): void {
+    window.clearInterval(this.nextGameTimer);
+    // A game that starts from the game-over screen continues the session.
+    this.gameNo = this.mode === 'over' ? this.gameNo + 1 : 1;
+    this.startScores = new Map(s.view().players.map((p) => [p.id, p.score]));
     unlockAudio();
     void enterLandscapeFullscreen();
     this.setSession(s);
@@ -377,9 +390,9 @@ class App {
     }
   }
 
-  private startNetGame(): void {
+  private startNetGame(scores: ReadonlyMap<string, number> = new Map()): void {
     if (this.net?.kind !== 'host') return;
-    this.beginGame(this.net.host.start(this.settings.difficulty, this.nextSeed()));
+    this.beginGame(this.net.host.start(this.settings.difficulty, this.nextSeed(), scores));
   }
 
   private postChatResult(view: GameState): void {
@@ -414,6 +427,7 @@ class App {
   }
 
   private toMenu(): void {
+    window.clearInterval(this.nextGameTimer);
     this.leaveNet();
     this.mode = 'menu';
     this.hud.show(false);
@@ -451,27 +465,53 @@ class App {
     const winner = g.players.find((p) => p.id === g.winnerId);
     const ranked = [...g.players].sort((a, b) => rankKey(b, g) - rankKey(a, g));
     $('overTitle').textContent = winner?.id === me ? t('youWin') : t('winner', { name: winner?.name ?? '?' });
-    $('overPlace').textContent = t('place', { n: ranked.findIndex((p) => p.id === me) + 1 });
+    $('overPlace').textContent = `${t('gameNumber', { n: this.gameNo })} · ${t('place', { n: ranked.findIndex((p) => p.id === me) + 1 })}`;
     $('standings').replaceChildren(
       ...ranked.map((p) => {
         const li = document.createElement('li');
         const dot = document.createElement('span');
+        dot.className = 'dot';
         dot.style.background = PLAYER_COLORS[p.colorIndex % PLAYER_COLORS.length]!;
-        li.append(dot, p.id === me ? t('you') : p.name);
+        const name = document.createElement('b');
+        name.textContent = p.id === me ? t('you') : p.name;
+        const gain = document.createElement('span');
+        gain.className = 'gain';
+        const earned = p.score - (this.startScores.get(p.id) ?? 0);
+        gain.textContent = earned > 0 ? t('pointsGained', { n: earned }) : '';
+        const pts = document.createElement('span');
+        pts.className = 'pts';
+        pts.textContent = t('points', { n: p.score });
+        li.append(dot, name, pts, gain);
         return li;
       }),
     );
     const client = this.net?.kind === 'client';
     $('btnAgain').hidden = client;
-    $('overWait').hidden = !client;
-    $('overWait').textContent = t('rematchWait');
-    $('btnMenu').textContent = this.net ? t('leave') : t('menu');
+    $('overWait').hidden = false;
+    $('btnMenu').textContent = t('leave');
     this.show('gameover');
+    // Keep playing: the next game starts by itself (the host decides in multiplayer).
+    if (client) {
+      $('overWait').textContent = t('nextGameSoon');
+      return;
+    }
+    let left = NEXT_GAME_DELAY_S;
+    const tick = () => {
+      $('btnAgain').textContent = `${t('continueNow')} (${left})`;
+      $('overWait').textContent = t('nextGameIn', { n: left });
+      if (left-- <= 0) this.playAgain();
+    };
+    tick();
+    this.nextGameTimer = window.setInterval(tick, 1000);
   }
 
   private playAgain(): void {
-    if (this.net?.kind === 'host') this.startNetGame();
-    else if (!this.net) this.startLocalGame();
+    window.clearInterval(this.nextGameTimer);
+    if (this.mode !== 'over') return;
+    // Points carry over to the next game.
+    const scores = new Map(this.session.view().players.map((p) => [p.id, p.score]));
+    if (this.net?.kind === 'host') this.startNetGame(scores);
+    else if (!this.net) this.startLocalGame(scores);
   }
 
   private applyTexts(): void {

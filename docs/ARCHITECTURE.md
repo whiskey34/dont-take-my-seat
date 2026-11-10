@@ -77,7 +77,9 @@ intro → riding (kereta jalan, goyang, lalu mengerem)
 
 - Logikanya ada di `src/core/challenges.ts`, dan angkanya (kekuatan rem, jumlah penumpang, durasi earphone) di `CONFIG.challenge` dan `CONFIG.powerUp`.
 - Challenge dipilih acak (RNG ber-seed) saat kereta berangkat dari setiap stasiun, jadi host dan replay selalu konsisten.
-- Snapshot multiplayer (protokol **v2**) membawa challenge, waktu rem, sisi pintu, posisi penumpang berdiri, power-up, serta status earphone dan pura-pura tidur tiap pemain. Pemain dengan versi game berbeda akan ditolak dengan pesan jelas.
+- Challenge **adu tendang** (`kickFight`): tombol aksi menendang pemain yang duduk dari kursinya (`seatKickTarget`, jarak dari depan kursi), jeda 2 detik; ronde tidak berakhir lebih awal walau semua kursi terisi. Challenge **lantai becek** (`puddles`): 3 genangan; di dalamnya kecepatan berbelok (`responsiveness`) turun dari 12 menjadi 1,6 sehingga pemain tergelincir. Prediksi client memakai fungsi `move()` yang sama, jadi licinnya terasa sama.
+- **Poin** (`Player.score`, angka di `CONFIG.points`): +10 per ronde tetap duduk, +5 per tendangan, +50 menang; setiap perubahan juga dikirim sebagai event `points`. Poin dibawa ke game berikutnya lewat `PlayerSetup.score` (pesan `start`). Layar game over menghitung mundur 8 detik lalu memulai game berikutnya; di multiplayer host yang memulai dan semua pemain ikut.
+- Snapshot multiplayer (sejak protokol **v2**, sekarang **v5**: poin di kolom ke-15 dan genangan `pd`) membawa challenge, waktu rem, sisi pintu, posisi penumpang berdiri, power-up, serta status earphone dan pura-pura tidur tiap pemain. Pemain dengan versi game berbeda akan ditolak dengan pesan jelas.
 
 ## Web app (PWA)
 

@@ -22,12 +22,15 @@ Detail teknis ada di [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 ## Cara main
 
 - Gerak: joystick di sisi kiri layar (atau WASD / panah).
-- Aksi: tombol kanan. Berubah jadi **DUDUK** di dekat kursi kosong, selain itu **DORONG**.
+- Aksi: tombol kanan. Berubah jadi **DUDUK** di dekat kursi kosong, **TENDANG** saat adu tendang, selain itu **DORONG**.
 - Kursi merah adalah kursi prioritas: kalau diduduki, kamu akan diminta berdiri.
 - **Challenge acak di setiap stasiun**, diumumkan di papan stasiun:
   - **Rem mendadak:** kereta tersentak sekali; siapa pun yang sedang diam akan oleng.
   - **Penumpang berdiri:** penumpang di lorong menghalangi jalan dan sesekali bergeser.
   - **Pintu satu sisi:** hanya pintu kiri atau kanan yang terbuka, dan penumpang baru masuk lalu berdiri di lorong sisi itu.
+  - **Adu tendang:** berdiri di depan pemain yang duduk lalu tekan **TENDANG** untuk menendangnya dari kursi (earphone menahan tendangan). Waktu rebutan berjalan penuh karena kursi bisa berpindah tangan.
+  - **Lantai becek:** genangan air di lantai; di atasnya kamu tergelincir dan sulit berbelok atau berhenti.
+- **Poin:** +10 setiap stasiun kamu tetap duduk, +5 setiap tendangan, +50 kalau menang. Setelah game selesai, game berikutnya mulai sendiri dalam 8 detik (atau tekan **Lanjut**) dan poin terus bertambah, tanpa kembali ke menu utama.
 - **Power-up di lantai** (satu per stasiun, ambil dengan berjalan di atasnya):
   - 🎧 **Earphone:** kebal dorongan selama 4 detik.
   - 💤 **Pura-pura tidur:** sekali duduk di kursi prioritas tanpa disuruh berdiri.

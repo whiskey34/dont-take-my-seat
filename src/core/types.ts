@@ -31,6 +31,7 @@ export interface Player {
   kickAt: number | null; // set while sitting on a priority seat
   shieldUntil: number; // earphones: pushes have no effect until then
   sleeping: boolean; // "pretend to sleep": the next priority seat is kept
+  score: number; // points, carried from game to game in one session
 }
 
 export interface Seat {
@@ -45,8 +46,17 @@ export interface Seat {
 export type Phase = 'intro' | 'riding' | 'scramble' | 'result' | 'gameOver';
 
 /** One random challenge per station. */
-export type ChallengeKind = 'suddenBrake' | 'crowd' | 'oneSideDoors';
-export const CHALLENGE_KINDS: readonly ChallengeKind[] = ['suddenBrake', 'crowd', 'oneSideDoors'];
+export type ChallengeKind = 'suddenBrake' | 'crowd' | 'oneSideDoors' | 'kickFight' | 'puddles';
+export const CHALLENGE_KINDS: readonly ChallengeKind[] = ['suddenBrake', 'crowd', 'oneSideDoors', 'kickFight', 'puddles'];
+
+/** A wet patch on the floor: slippery while you stand in it. */
+export interface Puddle {
+  x: number;
+  z: number;
+  r: number;
+}
+
+export type PointsReason = 'round' | 'win' | 'kick';
 
 export type PowerUpKind = 'earphones' | 'sleep';
 export const POWER_UP_KINDS: readonly PowerUpKind[] = ['earphones', 'sleep'];
@@ -87,6 +97,7 @@ export interface GameState {
   doorSide: -1 | 0 | 1;
   standers: Stander[];
   powerUps: PowerUp[];
+  puddles: Puddle[];
   nextId: number;
 }
 
@@ -103,10 +114,14 @@ export type GameEvent =
   | { type: 'suddenBrake' }
   | { type: 'powerUp'; playerId: PlayerId; kind: PowerUpKind }
   | { type: 'shielded'; playerId: PlayerId }
-  | { type: 'slept'; playerId: PlayerId; seatId: number };
+  | { type: 'slept'; playerId: PlayerId; seatId: number }
+  | { type: 'seatKick'; by: PlayerId; target: PlayerId; seatId: number }
+  | { type: 'points'; playerId: PlayerId; amount: number; reason: PointsReason };
 
 export interface PlayerSetup {
   id: PlayerId;
   name: string;
   isBot: boolean;
+  /** Points from earlier games in this session. */
+  score?: number;
 }

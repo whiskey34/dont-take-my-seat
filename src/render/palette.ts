@@ -23,4 +23,7 @@ export const SCENE = {
   shadow: '#1d2733',
   earphones: '#a855f7',
   pillow: '#7dd3fc',
+  puddle: '#5fa8d3',
+  puddleShine: '#dff3ff',
+  kick: '#ff5a4e',
 } as const;

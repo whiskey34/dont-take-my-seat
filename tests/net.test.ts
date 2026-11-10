@@ -257,6 +257,26 @@ describe('host and clients', () => {
     expect(backwards).toBeLessThanOrEqual(3);
   });
 
+  it('starts the next game with everyone\'s points carried over', () => {
+    const { hub, host, clients } = setupRoom();
+    host.start('normal', 3);
+    hub.pump();
+    const scores = new Map([['H', 70], ['A', 20], ['bot1', 5]]);
+    const next = host.start('normal', 4, scores);
+    for (let i = 0; i < 3; i++) hub.pump();
+    const a = clients[0]!.rec.session!;
+    expect(next.state.players.find((p) => p.id === 'A')!.score).toBe(20);
+    expect(a.view().players.find((p) => p.id === 'H')!.score).toBe(70);
+    expect(a.view().players.find((p) => p.id === 'B')!.score).toBe(0);
+    // Snapshots keep clients in step as points change.
+    next.state.players.find((p) => p.id === 'B')!.score = 15;
+    for (let i = 0; i < 6; i++) {
+      next.update(1 / 60, NO_INPUT);
+      hub.pump();
+    }
+    expect(a.view().players.find((p) => p.id === 'B')!.score).toBe(15);
+  });
+
   it('names bots bot_user_1, bot_user_2, …', () => {
     const { hub, host } = setupRoom();
     const session = host.start('normal', 5);

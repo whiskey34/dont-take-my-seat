@@ -45,6 +45,8 @@ export class TrainScene {
   private backdrop!: THREE.Texture;
   private readonly standers = new Map<number, Figure>();
   private readonly items = new Map<number, THREE.Group>();
+  private readonly puddles = new THREE.Group();
+  private puddleKey = '';
   private readonly doorGlow: Array<{ mesh: THREE.Mesh; side: 1 | -1 }> = [];
   private readonly camBase = new THREE.Vector3();
   private shake = 0;
@@ -289,6 +291,11 @@ export class TrainScene {
         const target = state.players.find((p) => p.id === e.target);
         if (target) this.pulse(target.pos.x, target.pos.z, '#ffffff');
       }
+      if (e.type === 'seatKick') {
+        const target = state.players.find((p) => p.id === e.target);
+        if (target) this.pulse(target.pos.x, target.pos.z, SCENE.kick);
+        this.shake = Math.max(this.shake, 0.25);
+      }
       if (e.type === 'sat') {
         const p = state.players.find((q) => q.id === e.playerId);
         if (p) this.pulse(p.pos.x, p.pos.z, SCENE.freeMarker);
@@ -364,6 +371,7 @@ export class TrainScene {
 
     this.syncStanders(state, dt);
     this.syncItems(state);
+    this.syncPuddles(state);
 
     // Free seats glow while they are free.
     const scramble = state.phase === 'scramble';
@@ -471,6 +479,35 @@ export class TrainScene {
       this.scene.remove(fig.root);
       this.standers.delete(id);
     }
+  }
+
+  /** Wet floor: flat glossy patches, rebuilt when the puddles change. */
+  private syncPuddles(state: GameState): void {
+    const key = state.puddles.map((d) => `${d.x},${d.z},${d.r}`).join(';');
+    if (key === this.puddleKey) return;
+    this.puddleKey = key;
+    if (!this.puddles.parent) this.scene.add(this.puddles);
+    for (const c of [...this.puddles.children]) {
+      this.puddles.remove(c);
+      if (c instanceof THREE.Mesh) c.geometry.dispose();
+    }
+    const water = new THREE.MeshLambertMaterial({ color: SCENE.puddle, transparent: true, opacity: 0.7 });
+    const shine = new THREE.MeshBasicMaterial({ color: SCENE.puddleShine, transparent: true, opacity: 0.55 });
+    state.puddles.forEach((d, i) => {
+      // Slightly irregular: an ellipse plus a smaller blob, and a highlight.
+      const main = new THREE.Mesh(new THREE.CircleGeometry(d.r, 28), water);
+      main.rotation.x = -Math.PI / 2;
+      main.scale.set(1.1, 0.9, 1);
+      main.position.set(d.x, 0.012, d.z);
+      const blob = new THREE.Mesh(new THREE.CircleGeometry(d.r * 0.45, 20), water);
+      blob.rotation.x = -Math.PI / 2;
+      blob.position.set(d.x + (i % 2 ? -1 : 1) * d.r * 0.6, 0.013, d.z + d.r * 0.3);
+      const hi = new THREE.Mesh(new THREE.CircleGeometry(d.r * 0.22, 12), shine);
+      hi.rotation.x = -Math.PI / 2;
+      hi.scale.set(1.8, 0.5, 1);
+      hi.position.set(d.x - d.r * 0.35, 0.014, d.z - d.r * 0.25);
+      this.puddles.add(main, blob, hi);
+    });
   }
 
   private syncItems(state: GameState): void {

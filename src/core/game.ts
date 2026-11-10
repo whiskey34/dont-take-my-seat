@@ -30,6 +30,7 @@ export function createGame(setups: readonly PlayerSetup[], seed: number): GameSt
     kickAt: null,
     shieldUntil: 0,
     sleeping: false,
+    score: Math.max(0, Math.floor(s.score ?? 0)),
   }));
   const state: GameState = {
     time: 0,
@@ -49,6 +50,7 @@ export function createGame(setups: readonly PlayerSetup[], seed: number): GameSt
     doorSide: 0,
     standers: [],
     powerUps: [],
+    puddles: [],
     nextId: 1,
   };
   placeStandingPlayers(state);
@@ -100,7 +102,8 @@ export function step(s: GameState, inputs: ReadonlyMap<PlayerId, PlayerInput>, d
     handlePriorityKicks(s, events);
   }
 
-  if (s.phase === 'scramble' && allFreeSeatsTaken(s)) s.phaseEndsAt = s.time;
+  // In a kick fight seats can change hands, so the scramble always runs its full time.
+  if (s.phase === 'scramble' && s.challenge !== 'kickFight' && allFreeSeatsTaken(s)) s.phaseEndsAt = s.time;
   if (s.time >= s.phaseEndsAt) advancePhase(s, events);
   return events;
 }
@@ -132,6 +135,7 @@ function advancePhase(s: GameState, events: GameEvent[]): void {
         const winner = alivePlayers(s)[0];
         if (winner) {
           s.winnerId = winner.id;
+          addPoints(winner, CONFIG.points.win, 'win', events);
           events.push({ type: 'winner', playerId: winner.id });
         }
         setPhase(s, 'gameOver', Infinity, events);
@@ -220,6 +224,12 @@ function resolveRound(s: GameState, events: GameEvent[]): void {
     p.kickAt = null;
   }
   if (losers.length > 0) events.push({ type: 'eliminated', playerIds: losers.map((p) => p.id) });
+  for (const p of alive) if (!p.eliminated) addPoints(p, CONFIG.points.round, 'round', events);
+}
+
+function addPoints(p: Player, amount: number, reason: 'round' | 'win' | 'kick', events: GameEvent[]): void {
+  p.score += amount;
+  events.push({ type: 'points', playerId: p.id, amount, reason });
 }
 
 // ---------------------------------------------------------------- actions
@@ -246,6 +256,8 @@ function handleAction(s: GameState, p: Player, input: PlayerInput, events: GameE
   }
 
   if (s.time < p.pushReadyAt) return;
+  const victim = seatKickTarget(s, p);
+  if (victim) return kickOffSeat(s, p, victim, events);
   const target = pushTarget(s, p);
   if (!target) return;
   const dx = target.pos.x - p.pos.x;
@@ -262,6 +274,50 @@ function handleAction(s: GameState, p: Player, input: PlayerInput, events: GameE
   target.vel.z += (dz / len) * PUSH.impulse;
   target.stunnedUntil = s.time + PUSH.stun;
   events.push({ type: 'pushed', by: p.id, target: target.id });
+}
+
+/** Kick fight: a seated player right in front of us that we could kick off their seat. */
+export function seatKickTarget(s: GameState, p: Player): Player | undefined {
+  if (s.challenge !== 'kickFight' || s.phase !== 'scramble' || p.seatId !== null || p.eliminated) return undefined;
+  let best: Player | undefined;
+  let bestD: number = CONFIG.challenge.kickRange;
+  for (const o of s.players) {
+    const seat = o === p || o.eliminated ? undefined : findSeat(s, o.seatId);
+    if (!seat) continue;
+    const d = dist(p.pos, seatFront(seat));
+    if (d <= bestD) {
+      best = o;
+      bestD = d;
+    }
+  }
+  return best;
+}
+
+function kickOffSeat(s: GameState, p: Player, target: Player, events: GameEvent[]): void {
+  const seat = findSeat(s, target.seatId);
+  if (!seat) return;
+  p.pushReadyAt = s.time + CONFIG.challenge.kickCooldown;
+  p.facing = seat.side > 0 ? 0 : Math.PI;
+  if (isShielded(s, target)) {
+    events.push({ type: 'shielded', playerId: target.id });
+    return;
+  }
+  seat.playerId = null;
+  target.seatId = null;
+  target.kickAt = null;
+  // Lands in the aisle beside the seat, a little dazed.
+  const front = seatFront(seat);
+  const side = target.pos.x >= p.pos.x ? 1 : -1;
+  target.pos = { x: front.x + side * 0.7, z: front.z * 0.7 };
+  target.vel = { x: side * 3, z: -seat.side * 1.5 };
+  target.stunnedUntil = s.time + CONFIG.challenge.kickStun;
+  events.push({ type: 'seatKick', by: p.id, target: target.id, seatId: seat.id });
+  addPoints(p, CONFIG.points.kick, 'kick', events);
+}
+
+/** True if the point is inside a puddle (wet floor challenge). */
+export function onPuddle(s: GameState, pos: Vec2): boolean {
+  return s.puddles.some((d) => Math.hypot(pos.x - d.x, pos.z - d.z) < d.r);
 }
 
 export function pushTarget(s: GameState, p: Player): Player | undefined {
@@ -319,7 +375,9 @@ export function move(s: GameState, p: Player, input: PlayerInput, dt: number): v
     mx = 0;
     mz = 0;
   }
-  const k = 1 - Math.exp(-P.responsiveness * dt);
+  // Wet floor: hard to change direction, you keep sliding.
+  const grip = s.puddles.length > 0 && onPuddle(s, p.pos) ? CONFIG.challenge.puddleGrip : P.responsiveness;
+  const k = 1 - Math.exp(-grip * dt);
   p.vel.x += (mx * P.speed - p.vel.x) * k;
   p.vel.z += (mz * P.speed - p.vel.z) * k;
   const a = trainAccel(s);

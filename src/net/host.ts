@@ -93,12 +93,15 @@ export class HostNet {
   }
 
   /** Starts (or restarts) a game with everyone connected; bots fill the rest. */
-  start(difficulty: Difficulty, seed: number): HostSession {
+  start(difficulty: Difficulty, seed: number, scores: ReadonlyMap<string, number> = new Map()): HostSession {
     this.game?.session.dispose();
     // People who left before this game starts are not kept.
     this.members = this.members.filter((m) => m.peer !== null);
-    const setups: PlayerSetup[] = this.members.map((p) => ({ id: p.id, name: p.name, isBot: false }));
-    for (let i = 1; setups.length < CONFIG.maxPlayers; i++) setups.push({ id: `bot${i}`, name: botName(i), isBot: true });
+    const setups: PlayerSetup[] = this.members.map((p) => ({ id: p.id, name: p.name, isBot: false, score: scores.get(p.id) ?? 0 }));
+    for (let i = 1; setups.length < CONFIG.maxPlayers; i++) {
+      const id = `bot${i}`;
+      setups.push({ id, name: botName(i), isBot: true, score: scores.get(id) ?? 0 });
+    }
     const session = new HostSession(this.transport, setups, seed, difficulty, () => this.peerIds(), () => this.offline);
     this.game = { session, seed, setups, difficulty };
     this.broadcast('reliable', { t: 'start', seed, players: setups, difficulty });
