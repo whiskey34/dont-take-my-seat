@@ -31,6 +31,7 @@ export function createGame(setups: readonly PlayerSetup[], seed: number): GameSt
     shieldUntil: 0,
     sleeping: false,
     boostUntil: 0,
+    slipUntil: 0,
     score: Math.max(0, Math.floor(s.score ?? 0)),
   }));
   const [route, rngAfterRoute] = pickRoute(seed | 0);
@@ -118,7 +119,7 @@ export function step(s: GameState, inputs: ReadonlyMap<PlayerId, PlayerInput>, d
       if (p.eliminated) continue;
       const input = inputs.get(p.id) ?? NO_INPUT;
       handleAction(s, p, input, events);
-      if (p.seatId === null) move(s, p, input, dt);
+      if (p.seatId === null && move(s, p, input, dt)) events.push({ type: 'slipped', playerId: p.id });
     }
     resolveCollisions(s);
     collectPowerUps(s, events);
@@ -189,6 +190,7 @@ function startRound(s: GameState, events: GameEvent[]): void {
     p.stunnedUntil = 0;
     p.shieldUntil = 0;
     p.boostUntil = 0;
+    p.slipUntil = 0;
   }
   placeStandingPlayers(s);
   startChallenge(s, events);
@@ -219,8 +221,10 @@ export function seatsThisStop(s: GameState): number {
   const alive = alivePlayers(s).length;
   if (isFinalStop(s)) return 1;
   const stop = s.round + 1;
-  const short = stop <= CONFIG.seats.everyoneUntilStop ? 0 : stop < CONFIG.seats.tighterFromStop ? 1 : 2;
-  return Math.max(1, Math.min(alive, alive - short));
+  const S = CONFIG.seats;
+  if (stop <= S.earlyUntilStop) return alive + S.earlyExtra;
+  const short = stop < S.tighterFromStop ? 1 : 2;
+  return Math.max(1, alive - short);
 }
 
 function openDoors(s: GameState, events: GameEvent[]): void {
@@ -240,8 +244,12 @@ function openDoors(s: GameState, events: GameEvent[]): void {
   events.push({ type: 'doorsOpen', seatIds: [...free, ...trap] });
 }
 
+/** Nothing left to decide: every open seat is taken, or every player sits. */
 function allFreeSeatsTaken(s: GameState): boolean {
-  return s.freeSeatIds.length > 0 && s.freeSeatIds.every((id) => s.seats[id]?.playerId !== null);
+  if (s.freeSeatIds.length === 0) return false;
+  const full = s.freeSeatIds.every((id) => s.seats[id]?.playerId !== null);
+  const everyoneSits = alivePlayers(s).every((p) => p.seatId !== null && p.kickAt === null);
+  return full || everyoneSits;
 }
 
 /** Anyone standing (or still on a priority seat) when the doors close is out. */
@@ -402,7 +410,8 @@ export function trainAccel(s: GameState): Vec2 {
 }
 
 /** Moves one standing player. Exported so a client can predict its own player. */
-export function move(s: GameState, p: Player, input: PlayerInput, dt: number): void {
+/** Moves one player for one tick. Returns true if they just slipped on a puddle. */
+export function move(s: GameState, p: Player, input: PlayerInput, dt: number): boolean {
   let mx = Number.isFinite(input.moveX) ? input.moveX : 0;
   let mz = Number.isFinite(input.moveZ) ? input.moveZ : 0;
   const len = Math.hypot(mx, mz);
@@ -410,18 +419,13 @@ export function move(s: GameState, p: Player, input: PlayerInput, dt: number): v
     mx /= len;
     mz /= len;
   }
+  const slipped = slip(s, p);
   if (s.time < p.stunnedUntil) {
     mx = 0;
     mz = 0;
   }
-  // Wet floor: hard to stop or change direction, you keep sliding. Getting
-  // going in the direction you already move is only a little slower, so a
-  // puddle never leaves you stuck.
-  let grip: number = P.responsiveness;
-  if (s.puddles.length > 0 && onPuddle(s, p.pos)) {
-    const speedUp = mx * p.vel.x + mz * p.vel.z >= 0 && Math.hypot(p.vel.x, p.vel.z) < Math.hypot(mx, mz) * P.speed;
-    grip = speedUp ? P.responsiveness * 0.5 : CONFIG.challenge.puddleGrip;
-  }
+  // Sliding after a slip keeps going a long way; otherwise normal grip.
+  const grip: number = s.time < p.slipUntil ? CONFIG.challenge.slipGrip : P.responsiveness;
   const k = 1 - Math.exp(-grip * dt);
   const speed = s.time < p.boostUntil ? P.speed * CONFIG.powerUp.boostSpeed : P.speed;
   p.vel.x += (mx * speed - p.vel.x) * k;
@@ -432,6 +436,23 @@ export function move(s: GameState, p: Player, input: PlayerInput, dt: number): v
   p.pos.x += p.vel.x * dt;
   p.pos.z += p.vel.z * dt;
   if (Math.hypot(mx, mz) > 0.1) p.facing = Math.atan2(mx, mz);
+  return slipped;
+}
+
+/**
+ * Wet floor: running onto a puddle makes you slip. You shoot off in the
+ * direction you were going and cannot steer until the slide is over.
+ */
+function slip(s: GameState, p: Player): boolean {
+  const C = CONFIG.challenge;
+  if (s.puddles.length === 0 || s.time < p.stunnedUntil + C.slipAgainAfter || !onPuddle(s, p.pos)) return false;
+  const v = Math.hypot(p.vel.x, p.vel.z);
+  if (v < C.slipMinSpeed) return false;
+  p.vel = { x: (p.vel.x / v) * C.slipSpeed, z: (p.vel.z / v) * C.slipSpeed };
+  p.slipUntil = s.time + C.slipTime;
+  p.stunnedUntil = Math.max(p.stunnedUntil, p.slipUntil);
+  p.facing = Math.atan2(p.vel.x, p.vel.z);
+  return true;
 }
 
 function resolveCollisions(s: GameState): void {

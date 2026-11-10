@@ -33,6 +33,7 @@ export interface Player {
   sleeping: boolean; // "pretend to sleep": the next priority seat is kept
   score: number; // points, carried from game to game in one session
   boostUntil: number; // iced coffee: runs faster until then
+  slipUntil: number; // slipped on a puddle: sliding, out of control until then
 }
 
 export interface Seat {
@@ -119,6 +120,7 @@ export type GameEvent =
   | { type: 'shielded'; playerId: PlayerId }
   | { type: 'slept'; playerId: PlayerId; seatId: number }
   | { type: 'seatKick'; by: PlayerId; target: PlayerId; seatId: number }
+  | { type: 'slipped'; playerId: PlayerId }
   | { type: 'points'; playerId: PlayerId; amount: number; reason: PointsReason };
 
 export interface PlayerSetup {

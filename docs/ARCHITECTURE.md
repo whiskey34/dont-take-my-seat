@@ -89,7 +89,7 @@ intro → riding (kereta jalan, goyang, lalu mengerem)
 ## Jumlah kursi per stasiun
 
 `seatsThisStop()` (angkanya di `CONFIG.seats`): makin jauh perjalanan, makin sedikit kursi.
-- Stop 1–2: kursi untuk semua pemain (pemanasan; yang gagal duduk tetap gugur).
+- Stop 1–2: kursi **lebih banyak** dari jumlah pemain (`earlyExtra`, +2; pemanasan, yang gagal duduk tetap gugur). Rebutan selesai lebih awal kalau semua pemain sudah duduk.
 - Stop 3–4: kurang satu. Stop 5 dan seterusnya: kurang dua (minimal 1).
 - Stasiun terakhir perjalanan (`isFinalStop`): hanya 1 kursi, jadi game selalu selesai di sana. Papan stasiun menulis "Stasiun terakhir: cuma 1 kursi!".
 
@@ -97,10 +97,10 @@ intro → riding (kereta jalan, goyang, lalu mengerem)
 
 - Logikanya ada di `src/core/challenges.ts`, dan angkanya (kekuatan rem, jumlah penumpang, durasi earphone) di `CONFIG.challenge` dan `CONFIG.powerUp`.
 - Challenge dipilih acak (RNG ber-seed) saat kereta berangkat dari setiap stasiun, jadi host dan replay selalu konsisten.
-- Challenge **adu tendang** (`kickFight`): tombol aksi menendang pemain yang duduk dari kursinya (`seatKickTarget`, jarak dari depan kursi), jeda 2 detik; ronde tidak berakhir lebih awal walau semua kursi terisi. Challenge **lantai becek** (`puddles`): 3 genangan; di dalamnya kecepatan berbelok (`responsiveness`) turun dari 12 menjadi 1,6 sehingga pemain tergelincir. Prediksi client memakai fungsi `move()` yang sama, jadi licinnya terasa sama.
+- Challenge **adu tendang** (`kickFight`): tombol aksi menendang pemain yang duduk dari kursinya (`seatKickTarget`, jarak dari depan kursi), jeda 2 detik; ronde tidak berakhir lebih awal walau semua kursi terisi. Challenge **lantai becek** (`puddles`): 3 genangan. Pemain yang lari ke genangan (lebih cepat dari 1,2 m/s) **terpeleset**: meluncur ke arah larinya dengan kecepatan 8,5 m/s yang berkurang pelan, tidak bisa dikendalikan selama 0,8 detik (`slipUntil`), lalu aman 0,5 detik sebelum bisa terpeleset lagi. Jalan pelan di atas genangan aman. Prediksi client memakai fungsi `move()` yang sama.
 - **Poin** (`Player.score`, angka di `CONFIG.points`): +10 per ronde tetap duduk, +5 per tendangan, +50 menang; setiap perubahan juga dikirim sebagai event `points`. Poin dibawa ke game berikutnya lewat `PlayerSetup.score` (pesan `start`). Layar game over menghitung mundur 8 detik lalu memulai game berikutnya; di multiplayer host yang memulai dan semua pemain ikut.
 - Power-up 🧋 **es kopi** (`boostUntil`): lari 1,4× lebih cepat selama 5 detik.
-- Snapshot multiplayer (sejak protokol **v2**, sekarang **v6**: poin di kolom ke-15, es kopi di kolom ke-16, genangan `pd`) membawa challenge, waktu rem, sisi pintu, posisi penumpang berdiri, power-up, serta status earphone dan pura-pura tidur tiap pemain. Pemain dengan versi game berbeda akan ditolak dengan pesan jelas.
+- Snapshot multiplayer (sejak protokol **v2**, sekarang **v7**: poin di kolom ke-15, es kopi ke-16, terpeleset ke-17, genangan `pd`) membawa challenge, waktu rem, sisi pintu, posisi penumpang berdiri, power-up, serta status earphone dan pura-pura tidur tiap pemain. Pemain dengan versi game berbeda akan ditolak dengan pesan jelas.
 
 ## Tips sekali tampil (`src/ui/tips.ts`)
 

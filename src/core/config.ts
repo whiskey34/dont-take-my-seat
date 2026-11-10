@@ -58,10 +58,14 @@ export const CONFIG = {
     kickRange: 0.85,
     kickStun: 0.9,
     kickCooldown: 2,
-    // Wet floor: how quickly you can change direction inside a puddle (normal is 12).
+    // Wet floor: running onto a puddle makes you slip and shoot off a good way.
     puddleCount: 3,
     puddleRadius: [0.6, 0.9],
-    puddleGrip: 1.6,
+    slipMinSpeed: 1.2, // walking slower than this is safe
+    slipSpeed: 8.5, // the slide starts this fast…
+    slipGrip: 1.3, // …and slows down this gently (normal grip is 12)
+    slipTime: 0.8, // no control while sliding
+    slipAgainAfter: 0.5, // seconds back on your feet before you can slip again
   },
 
   points: {
@@ -78,12 +82,13 @@ export const CONFIG = {
   },
 
   /**
-   * Seats get scarcer toward the end of the line: the first stops have a seat
-   * for everyone (warm-up), then one too few, later two too few, and the last
-   * station of the journey has a single seat (the final).
+   * Seats get scarcer toward the end of the line: the first stops have more
+   * seats than players (warm-up), then one too few, later two too few, and
+   * the last station of the journey has a single seat (the final).
    */
   seats: {
-    everyoneUntilStop: 2, // stops 1-2: a seat for every player
+    earlyUntilStop: 2, // stops 1-2: more seats than players
+    earlyExtra: 2, // … this many more
     tighterFromStop: 5, // from stop 5: two seats too few
   },
 } as const;

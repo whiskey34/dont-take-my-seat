@@ -45,10 +45,10 @@ describe('createGame', () => {
 });
 
 describe('a round', () => {
-  it('first stop: a normal seat for everyone, plus one priority trap', () => {
+  it('first stop: more normal seats than players, plus one priority trap', () => {
     const s = createGame(four, 7);
     runUntil(s, 'scramble');
-    expect(s.freeSeatIds).toHaveLength(4);
+    expect(s.freeSeatIds).toHaveLength(4 + CONFIG.seats.earlyExtra);
     expect(s.freeSeatIds.every((id) => !s.seats[id]!.priority && !s.seats[id]!.npc)).toBe(true);
     expect(s.trapSeatId).not.toBeNull();
     expect(s.seats[s.trapSeatId!]!.priority).toBe(true);
@@ -148,14 +148,14 @@ describe('full bot games', () => {
 });
 
 describe('seats get scarcer toward the end of the line', () => {
-  it('everyone, then one too few, then two too few, and one seat at the last station', () => {
+  it('extra seats, then one too few, then two too few, and one seat at the last station', () => {
     const s = createGame(four, 3);
     const at = (round: number, alive: number) => {
       s.round = round;
       s.players.forEach((p, i) => (p.eliminated = i >= alive));
       return seatsThisStop(s);
     };
-    expect([at(0, 4), at(1, 4)]).toEqual([4, 4]); // stops 1-2
+    expect([at(0, 4), at(1, 4)]).toEqual([6, 6]); // stops 1-2: two extra
     expect([at(2, 4), at(3, 3)]).toEqual([3, 2]); // stops 3-4
     expect([at(4, 4), at(5, 3), at(5, 2)]).toEqual([2, 1, 1]); // stop 5+: never below 1
     expect(isFinalStop({ ...s, round: s.route.length - 2 })).toBe(true);

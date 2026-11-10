@@ -316,6 +316,10 @@ export class TrainScene {
         const target = state.players.find((p) => p.id === e.target);
         if (target) this.pulse(target.pos.x, target.pos.z, '#ffffff');
       }
+      if (e.type === 'slipped') {
+        const who = state.players.find((p) => p.id === e.playerId);
+        if (who) this.pulse(who.pos.x, who.pos.z, SCENE.puddle);
+      }
       if (e.type === 'seatKick') {
         const target = state.players.find((p) => p.id === e.target);
         if (target) this.pulse(target.pos.x, target.pos.z, SCENE.kick);

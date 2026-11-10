@@ -318,7 +318,9 @@ export class ClientSession implements GameSession {
     const me = this.me;
     me.seatId = server.seatId;
     me.eliminated = server.eliminated;
-    me.stunnedUntil = server.stunnedUntil;
+    // A slip we predicted ourselves stays until the host's own copy arrives.
+    me.stunnedUntil = Math.max(server.stunnedUntil, me.slipUntil > this.hostNow() ? me.stunnedUntil : 0);
+    me.slipUntil = Math.max(server.slipUntil, me.slipUntil > this.hostNow() ? me.slipUntil : 0);
     me.shieldUntil = server.shieldUntil;
     me.boostUntil = server.boostUntil;
     me.sleeping = server.sleeping;

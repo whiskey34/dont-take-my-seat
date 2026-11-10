@@ -109,6 +109,9 @@ export class Hud {
         case 'slept':
           if (e.playerId === me) this.flash(t('sleptSafe'), 'good', 1600);
           break;
+        case 'slipped':
+          if (e.playerId === me) this.flash(t('youSlipped'), 'bad', 1200);
+          break;
         case 'seatKick': {
           const name = (id: string) => state.players.find((p) => p.id === id)?.name ?? id;
           if (e.by === me) this.flash(t('youKicked', { name: name(e.target), n: CONFIG.points.kick }), 'good', 1600);

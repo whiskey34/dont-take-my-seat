@@ -133,33 +133,41 @@ describe('kick fight and wet floor', () => {
     expect(a!.seatId).toBe(seat.id);
   });
 
-  it('puddles make you slide: you cannot stop or turn quickly on wet floor', () => {
+  it('running onto a puddle makes you slip and shoot off a good way', () => {
     const s = gameWith('puddles');
     expect(s.puddles).toHaveLength(CONFIG.challenge.puddleCount);
-    const run = (wet: boolean) => {
-      const g = structuredClone(s);
-      const d = g.puddles[0]!;
-      if (!wet) g.puddles = [];
-      g.phaseEndsAt = Infinity; // freeze the phase, no sway effects on x
-      const a = g.players[0]!;
-      a.pos = { x: d.x, z: d.z };
-      a.vel = { x: 4, z: 0 };
-      for (let i = 0; i < 6; i++) step(g, new Map([['a', { moveX: -1, moveZ: 0, action: false }]]), DT);
-      return a.vel.x;
-    };
-    expect(run(false)).toBeLessThan(0); // dry: already turned around
-    expect(run(true)).toBeGreaterThan(2.5); // wet: still sliding the old way
+    const d = s.puddles[0]!;
+    s.phaseEndsAt = Infinity;
+    s.standers = [];
+    const a = s.players[0]!;
+    // Run toward the puddle from the left.
+    a.pos = { x: d.x - d.r - 1.2, z: d.z };
+    a.vel = { x: 0, z: 0 };
+    s.players.slice(1).forEach((p, i) => (p.pos = { x: 20, z: i - 1 })); // out of the way
+    s.puddles = [d];
+    const run = new Map([['a', { moveX: 1, moveZ: 0, action: false }]]);
+    let slippedAt: number | null = null;
+    for (let i = 0; i < 90 && slippedAt === null; i++) {
+      const ev = step(s, run, DT);
+      if (ev.some((e) => e.type === 'slipped' && e.playerId === 'a')) slippedAt = a.pos.x;
+    }
+    expect(slippedAt).not.toBeNull();
+    expect(s.time < a.slipUntil).toBe(true);
+    // Out of control: steering the other way does nothing, and the slide goes far.
+    const back = new Map([['a', { moveX: -1, moveZ: 0, action: false }]]);
+    for (let i = 0; i < Math.round(CONFIG.challenge.slipTime / DT); i++) step(s, back, DT);
+    expect(a.pos.x - slippedAt!).toBeGreaterThan(3);
   });
 
-  it('a puddle never leaves you stuck: from standing still you get going', () => {
+  it('walking slowly over a puddle is safe', () => {
     const s = gameWith('puddles');
-    s.phaseEndsAt = Infinity;
     const d = s.puddles[0]!;
+    s.phaseEndsAt = Infinity;
     const a = s.players[0]!;
-    a.pos = { x: d.x, z: d.z };
+    a.pos = { x: d.x - d.r - 0.3, z: d.z };
     a.vel = { x: 0, z: 0 };
-    for (let i = 0; i < 18; i++) step(s, new Map([['a', { moveX: 1, moveZ: 0, action: false }]]), DT);
-    expect(a.vel.x).toBeGreaterThan(CONFIG.player.speed * 0.8);
+    const creep = new Map([['a', { moveX: 0.2, moveZ: 0, action: false }]]);
+    for (let i = 0; i < 60; i++) expect(step(s, creep, DT).some((e) => e.type === 'slipped')).toBe(false);
   });
 });
 
