@@ -1,6 +1,6 @@
 {
   "name": "dont-take-my-seat",
-  "version": "0.9.6",
+  "version": "0.9.7",
   "description": "Don't Take My Seat — a commuter-train musical-chairs party game",
   "scripts": {
     "dev": "vite --host",

@@ -81,6 +81,8 @@ export interface GameState {
   phaseEndsAt: number;
   round: number; // 0-based
   station: string;
+  /** This game's journey: consecutive real stations, one per stop. */
+  route: string[];
   players: Player[];
   seats: Seat[];
   /** Seats freed at the current stop (non-priority). */

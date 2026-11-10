@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { botThink, createBrain } from '../src/ai/bot';
-import { CONFIG } from '../src/core/config';
-import { alivePlayers, createGame, step } from '../src/core/game';
+import { BOGOR_LINE, CONFIG, NAMBO_BRANCH, ROUTE_LENGTH, STATIONS } from '../src/core/config';
+import { alivePlayers, createGame, pickRoute, step } from '../src/core/game';
 import { createSeats, seatFront } from '../src/core/layout';
 import type { GameEvent, GameState, PlayerInput, PlayerSetup } from '../src/core/types';
 
@@ -144,5 +144,42 @@ describe('full bot games', () => {
       expect(alivePlayers(s)).toHaveLength(1);
       expect(s.winnerId).toBe(alivePlayers(s)[0]!.id);
     }
+  });
+});
+
+describe('stations', () => {
+  const line = [...BOGOR_LINE];
+  const nambo = [...NAMBO_BRANCH, ...BOGOR_LINE.slice(BOGOR_LINE.indexOf('Citayam'))];
+  const consecutive = (route: string[], along: string[]) => {
+    const i = along.indexOf(route[0]!);
+    return i >= 0 && route.every((st, k) => along[i + k] === st);
+  };
+
+  it('every game rides a real stretch of the Bogor line, in either direction or from Nambo', () => {
+    const kinds = new Set<string>();
+    for (let seed = 1; seed <= 200; seed++) {
+      const [route] = pickRoute(seed);
+      expect(route).toHaveLength(ROUTE_LENGTH);
+      const toKota = consecutive(route, line);
+      const toBogor = consecutive(route, [...line].reverse());
+      const fromNambo = consecutive(route, nambo);
+      expect(toKota || toBogor || fromNambo).toBe(true);
+      kinds.add(fromNambo ? 'nambo' : toKota ? 'kota' : 'bogor');
+    }
+    expect([...kinds].sort()).toEqual(['bogor', 'kota', 'nambo']);
+    // Stations not in service on the map are never used.
+    for (const closed of ['Gambir', 'Sukaresmi', 'Pondok Rajeg', 'Gunung Putri']) expect(STATIONS).not.toContain(closed);
+  });
+
+  it('each stop is the next station of the journey', () => {
+    const four: PlayerSetup[] = ['a', 'b', 'c', 'd'].map((id) => ({ id, name: id, isBot: true }));
+    const s = createGame(four, 77);
+    const brains = new Map(s.players.map((p, i) => [p.id, createBrain(i + 1)]));
+    const seen: string[] = [s.station];
+    for (let i = 0; i < 60 * 600 && s.phase !== 'gameOver'; i++) {
+      const ev = step(s, new Map(s.players.map((p) => [p.id, botThink(s, p, brains.get(p.id)!, 1 / 60)])), 1 / 60);
+      if (ev.some((e) => e.type === 'phase' && e.phase === 'riding') && seen[seen.length - 1] !== s.station) seen.push(s.station);
+    }
+    expect(seen).toEqual(s.route.slice(0, seen.length));
   });
 });

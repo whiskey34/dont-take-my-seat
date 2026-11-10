@@ -81,6 +81,11 @@ intro → riding (kereta jalan, goyang, lalu mengerem)
       → riding ... → gameOver
 ```
 
+## Stasiun
+
+- Daftar stasiun ada di `src/core/config.ts`: `BOGOR_LINE` (Commuter Line Bogor dari Bogor sampai Jakarta Kota, 24 stasiun) dan `NAMBO_BRANCH` (Nambo, Cibinong, bergabung di Citayam). Stasiun yang di peta belum melayani penumpang (Gambir, Sukaresmi, Pondok Rajeg, Gunung Putri) tidak dipakai.
+- Setiap game memilih satu perjalanan acak dari seed (`pickRoute`): 8 stasiun berurutan, ke arah Jakarta Kota atau ke arah Bogor, atau sesekali dari Nambo lewat Citayam. `route[0]` adalah stasiun keberangkatan (tampil saat intro), lalu setiap stop adalah stasiun berikutnya. Kalau stasiun diulang (tidak ada yang duduk), namanya tetap sama.
+
 ## Challenge dan power-up
 
 - Logikanya ada di `src/core/challenges.ts`, dan angkanya (kekuatan rem, jumlah penumpang, durasi earphone) di `CONFIG.challenge` dan `CONFIG.powerUp`.

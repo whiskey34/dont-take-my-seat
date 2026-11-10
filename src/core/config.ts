@@ -76,12 +76,43 @@ export const CONFIG = {
   },
 } as const;
 
-export const STATIONS = [
+/**
+ * Commuter Line Bogor (red line), from Bogor to Jakarta Kota, with the Nambo
+ * branch joining at Citayam. Stations without service on the map (Gambir,
+ * Sukaresmi, Pondok Rajeg, Gunung Putri) are left out.
+ */
+export const BOGOR_LINE = [
+  'Bogor',
+  'Cilebut',
+  'Bojong Gede',
+  'Citayam',
+  'Depok',
   'Depok Baru',
+  'Pondok Cina',
+  'Univ. Indonesia',
+  'Univ. Pancasila',
+  'Lenteng Agung',
+  'Tanjung Barat',
   'Pasar Minggu',
+  'Pasar Minggu Baru',
+  'Duren Kalibata',
+  'Cawang',
+  'Tebet',
   'Manggarai',
-  'Sudirman',
-  'Tanah Abang',
-  'Duri',
+  'Cikini',
+  'Gondangdia',
+  'Juanda',
+  'Sawah Besar',
+  'Mangga Besar',
+  'Jayakarta',
   'Jakarta Kota',
 ] as const;
+
+/** Nambo branch up to where it joins the main line (Citayam onwards is BOGOR_LINE). */
+export const NAMBO_BRANCH = ['Nambo', 'Cibinong'] as const;
+
+/** Every station a game can stop at. */
+export const STATIONS: readonly string[] = [...NAMBO_BRANCH, ...BOGOR_LINE];
+
+/** Stops in one game's journey (more than any game needs; it wraps if replays run long). */
+export const ROUTE_LENGTH = 8;

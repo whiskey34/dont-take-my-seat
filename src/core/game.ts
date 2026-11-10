@@ -1,5 +1,5 @@
 import { boardPassengers, collectPowerUps, isShielded, keepOutOfStanders, startChallenge, updateChallenge } from './challenges';
-import { CONFIG, STATIONS } from './config';
+import { BOGOR_LINE, CONFIG, NAMBO_BRANCH, ROUTE_LENGTH } from './config';
 import { createSeats, POLES, seatFront, seatSitPos } from './layout';
 import { nextRandom, pickDistinct } from './rng';
 import type { GameEvent, GameState, Phase, Player, PlayerId, PlayerInput, PlayerSetup, Seat, Vec2 } from './types';
@@ -32,18 +32,20 @@ export function createGame(setups: readonly PlayerSetup[], seed: number): GameSt
     sleeping: false,
     score: Math.max(0, Math.floor(s.score ?? 0)),
   }));
+  const [route, rngAfterRoute] = pickRoute(seed | 0);
   const state: GameState = {
     time: 0,
     phase: 'intro',
     phaseEndsAt: PH.intro,
     round: 0,
-    station: STATIONS[0],
+    station: route[0]!,
+    route,
     players,
     seats: createSeats(),
     freeSeatIds: [],
     trapSeatId: null,
     winnerId: null,
-    rngState: seed | 0,
+    rngState: rngAfterRoute,
     challenge: null,
     brakeAt: null,
     brakeUntil: 0,
@@ -55,6 +57,26 @@ export function createGame(setups: readonly PlayerSetup[], seed: number): GameSt
   };
   placeStandingPlayers(state);
   return state;
+}
+
+/**
+ * A random stretch of the line: toward Jakarta Kota or toward Bogor, and now
+ * and then starting from Nambo (the Cibinong branch) through Citayam.
+ */
+export function pickRoute(rng: number): [string[], number] {
+  const [a, r1] = nextRandom(rng);
+  const [b, r2] = nextRandom(r1);
+  const [c, r3] = nextRandom(r2);
+  const citayam = BOGOR_LINE.indexOf('Citayam');
+  let line: string[];
+  if (c < 0.2) {
+    // Nambo → Cibinong → Citayam → … toward Jakarta Kota.
+    line = [...NAMBO_BRANCH, ...BOGOR_LINE.slice(citayam)];
+    return [line.slice(0, ROUTE_LENGTH), r3];
+  }
+  line = b < 0.5 ? [...BOGOR_LINE] : [...BOGOR_LINE].reverse();
+  const start = Math.floor(a * (line.length - ROUTE_LENGTH + 1));
+  return [line.slice(start, start + ROUTE_LENGTH), r3];
 }
 
 export const alivePlayers = (s: GameState): Player[] => s.players.filter((p) => !p.eliminated);
@@ -151,7 +173,8 @@ function advancePhase(s: GameState, events: GameEvent[]): void {
 }
 
 function startRound(s: GameState, events: GameEvent[]): void {
-  s.station = STATIONS[s.round % STATIONS.length] ?? STATIONS[0];
+  // route[0] is where the journey starts (shown during the intro); stops follow.
+  s.station = s.route[(s.round + 1) % s.route.length] ?? s.station;
   for (const seat of s.seats) {
     seat.npc = true;
     seat.playerId = null;
