@@ -13,6 +13,14 @@ name = "ROOMS"
 class_name = "Room"
 
 # SQLite-backed Durable Objects work on the Workers Free plan.
+[[durable_objects.bindings]]
+name = "BOARD"
+class_name = "Leaderboard"
+
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["Room"]
+
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["Leaderboard"]

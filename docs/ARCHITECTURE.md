@@ -107,6 +107,13 @@ intro → riding (kereta jalan, goyang, lalu mengerem)
 - `src/render/figure.ts`: semua orang (pemain, penumpang duduk dan berdiri, lansia) bergaya chibi bulat: kepala besar dengan mata, alis dan telinga, rambut (ada yang botak), badan bulat, tangan, dan kaki bersepatu. Dibuat langsung dari bentuk dasar Three.js, tanpa file model. Kaki dan tangan berayun saat berjalan (`setStride`); saat duduk kaki ke depan (`setSeated`).
 - Tendangan dari kursi (`seatKick` di `scene.ts`): penendang memutar badan ke samping dan mengayunkan kaki kanan, kilatan merah lembut muncul di titik tendangan, dan yang ditendang melompat keluar dari kursi ke lorong. Murni tampilan, dipicu event yang juga dikirim host ke semua pemain, jadi sama di mode bot dan multiplayer.
 
+## Daftar pemain, papan peringkat, dan pengaturan kontrol
+
+- **Daftar pemain** di kiri atas ringkas: satu titik warna per pemain (garis hijau = duduk, kuning = terputus, pudar = gugur) dan poinmu. Tahan **Tab** (keyboard) atau sentuh lama untuk melihat daftar lengkap; lepas untuk menutup. Sentuhan singkat membukanya 3 detik.
+- **Papan peringkat** (`src/net/leaderboard.ts`, Worker `/scores`): setelah tiap game, perangkat mengirim poin pemainnya (poin berjalan selama main berturut-turut) dan apakah menang. Worker menyimpan poin terbaik dan jumlah menang per kunci pemain di SQLite milik Durable Object `Leaderboard`. Menu menampilkan 20 teratas, dan layar akhir game menampilkan peringkatmu. Skor dikirim dari perangkat pemain, jadi ini papan yang ramah, bukan anti-curang; data aneh dan kiriman beruntun (kurang dari 15 detik) ditolak.
+- **Pengaturan kontrol**: sensitivitas, ukuran tombol (kecil/sedang/besar), posisi analog (kiri/kanan, tombol aksi pindah ke sisi lain), analog ikut jempol atau tetap, dan getar (duduk, didorong, ditendang, terpeleset). Esc menjeda game.
+- **Ditendang dari kursi**: kilatan merah, yang ditendang terlempar melengkung sambil berputar, lalu bintang-bintang berputar di atas kepalanya selama oleng.
+
 ## Tips sekali tampil (`src/ui/tips.ts`)
 
 - Pertama kali sebuah item (es kopi, earphone, pura-pura tidur), challenge, atau aturan (kursi prioritas, kursi cukup untuk semua, kursi makin sedikit, stasiun terakhir) muncul, tampil penjelasan singkat yang menunjuk ke benda itu (lingkaran sorotan).

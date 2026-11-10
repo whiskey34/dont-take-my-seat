@@ -9,6 +9,8 @@
  *   GET /turn           Short-lived Cloudflare TURN credentials (ports 443,
  *                       80, 3478, 5349), so phones on networks that block
  *                       direct connections can still play.
+ *   GET  /scores        Leaderboard: top players by points (+ your rank with ?key=).
+ *   POST /scores        Report your points after a game: {key, name, score, won}.
  *   GET /               Health check.
  */
 
@@ -16,6 +18,7 @@ import { DurableObject } from 'cloudflare:workers';
 
 export interface Env {
   ROOMS: DurableObjectNamespace<Room>;
+  BOARD: DurableObjectNamespace<Leaderboard>;
   /** Comma-separated list of web origins allowed to use this Worker. */
   ALLOWED_ORIGINS: string;
   /** From the Cloudflare dashboard (Realtime → TURN). Set as secrets. */
@@ -37,7 +40,9 @@ function allowedOrigin(req: Request, env: Env): string | null {
 }
 
 function cors(origin: string | null): Record<string, string> {
-  return origin ? { 'Access-Control-Allow-Origin': origin, 'Access-Control-Allow-Methods': 'GET', Vary: 'Origin' } : { Vary: 'Origin' };
+  return origin
+    ? { 'Access-Control-Allow-Origin': origin, 'Access-Control-Allow-Methods': 'GET, POST', 'Access-Control-Allow-Headers': 'Content-Type', Vary: 'Origin' }
+    : { Vary: 'Origin' };
 }
 
 /** Cached per isolate, so many players share one call to the TURN API. */
@@ -76,6 +81,14 @@ export default {
       if (!origin) return new Response('origin not allowed', { status: 403, headers: cors(null) });
       const body = await turnCredentials(env);
       return new Response(body, { headers: { ...cors(origin), 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } });
+    }
+
+    if (url.pathname === '/scores') {
+      if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors(origin) });
+      if (!origin) return new Response('origin not allowed', { status: 403, headers: cors(null) });
+      // One leaderboard for everyone.
+      const res = await env.BOARD.get(env.BOARD.idFromName('global')).fetch(req);
+      return new Response(res.body, { status: res.status, headers: { ...cors(origin), 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } });
     }
 
     if (url.pathname.startsWith('/room/')) {
@@ -130,5 +143,83 @@ export class Room extends DurableObject<Env> {
     } catch {
       /* already closed */
     }
+  }
+}
+
+const KEY = /^[A-Za-z0-9_-]{8,40}$/;
+const TOP = 20;
+const MAX_SCORE = 50_000;
+/** Games take minutes; faster reports from one device are ignored. */
+const MIN_REPORT_GAP_MS = 15_000;
+
+function cleanName(v: unknown): string {
+  const s = typeof v === 'string' ? v.normalize('NFKC').replace(/[\u0000-\u001f<>]/g, '').trim().slice(0, 14) : '';
+  return s || 'Penumpang';
+}
+
+/**
+ * Best points per device (player key) plus a win count, in this Durable
+ * Object's own SQLite storage (free plan, no separate database to set up).
+ * Scores come from the players' own devices, so this is a friendly board,
+ * not a cheat-proof one; obvious junk and spam are rejected.
+ */
+export class Leaderboard extends DurableObject<Env> {
+  constructor(ctx: DurableObjectState, env: Env) {
+    super(ctx, env);
+    ctx.storage.sql.exec(
+      `CREATE TABLE IF NOT EXISTS scores (key TEXT PRIMARY KEY, name TEXT NOT NULL, score INTEGER NOT NULL, wins INTEGER NOT NULL DEFAULT 0, games INTEGER NOT NULL DEFAULT 0, updated INTEGER NOT NULL, reported INTEGER NOT NULL DEFAULT 0);
+       CREATE INDEX IF NOT EXISTS by_score ON scores (score DESC, updated ASC);`,
+    );
+  }
+
+  override async fetch(req: Request): Promise<Response> {
+    const url = new URL(req.url);
+    if (req.method === 'POST') return this.report(req);
+    return Response.json(this.board(url.searchParams.get('key')));
+  }
+
+  private board(key: string | null) {
+    const sql = this.ctx.storage.sql;
+    const top = sql.exec<{ name: string; score: number; wins: number }>('SELECT name, score, wins FROM scores ORDER BY score DESC, updated ASC LIMIT ?', TOP).toArray();
+    let me: { rank: number; score: number; wins: number; name: string } | null = null;
+    if (key && KEY.test(key)) {
+      const row = sql.exec<{ name: string; score: number; wins: number; updated: number }>('SELECT name, score, wins, updated FROM scores WHERE key = ?', key).toArray()[0];
+      if (row) {
+        const ahead = sql.exec<{ n: number }>('SELECT COUNT(*) AS n FROM scores WHERE score > ? OR (score = ? AND updated < ?)', row.score, row.score, row.updated).one().n;
+        me = { rank: ahead + 1, score: row.score, wins: row.wins, name: row.name };
+      }
+    }
+    const total = sql.exec<{ n: number }>('SELECT COUNT(*) AS n FROM scores').one().n;
+    return { top, me, total };
+  }
+
+  private async report(req: Request): Promise<Response> {
+    let body: { key?: unknown; name?: unknown; score?: unknown; won?: unknown };
+    try {
+      const text = await req.text();
+      if (text.length > 500) return new Response('too big', { status: 413 });
+      body = JSON.parse(text) as typeof body;
+    } catch {
+      return new Response('bad json', { status: 400 });
+    }
+    const key = typeof body.key === 'string' && KEY.test(body.key) ? body.key : null;
+    const score = typeof body.score === 'number' && Number.isInteger(body.score) && body.score >= 0 && body.score <= MAX_SCORE ? body.score : null;
+    if (!key || score === null) return new Response('bad report', { status: 400 });
+    const name = cleanName(body.name);
+    const won = body.won === true ? 1 : 0;
+    const now = Date.now();
+    const sql = this.ctx.storage.sql;
+    const prev = sql.exec<{ reported: number }>('SELECT reported FROM scores WHERE key = ?', key).toArray()[0];
+    if (prev && now - prev.reported < MIN_REPORT_GAP_MS) return Response.json({ ...this.board(key), ignored: true });
+    if (prev) {
+      // SET expressions see the old row, so `score` below is the previous best.
+      sql.exec(
+        'UPDATE scores SET name = ?, wins = wins + ?, games = games + 1, reported = ?, updated = CASE WHEN ? > score THEN ? ELSE updated END, score = MAX(score, ?) WHERE key = ?',
+        name, won, now, score, now, score, key,
+      );
+    } else {
+      sql.exec('INSERT INTO scores (key, name, score, wins, games, updated, reported) VALUES (?, ?, ?, ?, 1, ?, ?)', key, name, score, won, now, now);
+    }
+    return Response.json(this.board(key));
   }
 }

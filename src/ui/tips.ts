@@ -165,6 +165,7 @@ export class Tips {
     if (this.mode !== 'card' || !this.current) return;
     if (e.code === 'Enter' || e.code === 'Space' || e.code === 'Escape') {
       e.preventDefault();
+      e.stopPropagation(); // Esc closes the tip without also pausing
       this.done();
     }
   };

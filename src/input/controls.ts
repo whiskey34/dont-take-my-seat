@@ -12,6 +12,7 @@ export class Controls {
   private actionQueued = false;
   private radius = 56;
   private reach = 1; // stick travel for full speed, relative to the drawn stick size
+  private fixed = false; // stick stays in its spot instead of jumping to the thumb
   private dead = 0.12;
   private curve = 1;
   /** Event counts for the ?debug panel. */
@@ -84,6 +85,12 @@ export class Controls {
     return { moveX: clamp(x), moveZ: clamp(y), action };
   }
 
+  /** Fixed stick (stays in its spot) or floating (jumps to where the thumb lands). */
+  setFixed(fixed: boolean): void {
+    this.fixed = fixed;
+    this.release();
+  }
+
   /** Current stick/keys state without consuming anything (debug panel). */
   peek(): string {
     const touch = this.stickPointer === null ? 'no touch' : `touch #${this.stickPointer}`;
@@ -109,12 +116,18 @@ export class Controls {
     } catch {
       /* not supported */
     }
-    this.origin = { x: e.clientX, y: e.clientY };
     const drawn = this.base.offsetWidth / 2 || 60;
     this.radius = Math.max(30, (drawn - 4) * this.reach);
-    const rect = this.zone.getBoundingClientRect();
-    this.base.style.left = `${e.clientX - rect.left}px`;
-    this.base.style.top = `${e.clientY - rect.top}px`;
+    if (this.fixed) {
+      // Fixed stick: measure from its centre, wherever the thumb lands.
+      const b = this.base.getBoundingClientRect();
+      this.origin = { x: b.left + b.width / 2, y: b.top + b.height / 2 };
+    } else {
+      this.origin = { x: e.clientX, y: e.clientY };
+      const rect = this.zone.getBoundingClientRect();
+      this.base.style.left = `${e.clientX - rect.left}px`;
+      this.base.style.top = `${e.clientY - rect.top}px`;
+    }
     this.base.classList.add('active');
     this.updateKnob(0, 0);
   };

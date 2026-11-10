@@ -17,7 +17,13 @@ const PHASE_LENGTH: Record<string, number> = {
 /** In-game overlay: station board, roster, banners, name tags, action button. */
 export class Hud {
   private readonly root = $('hud');
-  private readonly roster = $('roster');
+  private readonly rosterBox = $('roster');
+  private readonly roster = $('rosterFull');
+  private readonly rosterMini = $('rosterMini');
+  private readonly miniDots = new Map<string, HTMLElement>();
+  private rosterTimer = 0;
+  private rosterDownAt = 0;
+  private rosterByPointer = false;
   private readonly board = $('board');
   private readonly boardLabel = $('boardLabel');
   private readonly boardStation = $('boardStation');
@@ -33,6 +39,46 @@ export class Hud {
   private tags = new Map<string, HTMLElement>();
   private bannerTimer = 0;
   private humanId: string | null = null;
+
+  constructor() {
+    // The player list stays small; hold Tab (keyboard) or touch it to see everyone.
+    this.rosterMini.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      const wasOpen = this.rosterBox.classList.contains('open');
+      window.clearTimeout(this.rosterTimer);
+      if (wasOpen && !this.rosterByPointer) return;
+      if (wasOpen) return this.openRoster(false);
+      this.rosterByPointer = true;
+      this.rosterDownAt = performance.now();
+      this.openRoster(true);
+    });
+    window.addEventListener('pointerup', () => {
+      if (!this.rosterByPointer || !this.rosterBox.classList.contains('open')) return;
+      // A long press closes on release; a quick tap keeps it open for a moment.
+      if (performance.now() - this.rosterDownAt > 300) this.openRoster(false);
+      else this.rosterTimer = window.setTimeout(() => this.openRoster(false), 3000);
+    });
+    window.addEventListener(
+      'keydown',
+      (e) => {
+        if (e.code !== 'Tab' || this.root.hidden) return;
+        e.preventDefault();
+        if (!e.repeat) this.openRoster(true);
+      },
+      true,
+    );
+    window.addEventListener('keyup', (e) => {
+      if (e.code === 'Tab') this.openRoster(false);
+    });
+    window.addEventListener('blur', () => this.openRoster(false));
+  }
+
+  private openRoster(open: boolean): void {
+    window.clearTimeout(this.rosterTimer);
+    if (!open) this.rosterByPointer = false;
+    this.rosterBox.classList.toggle('open', open);
+    this.rosterMini.setAttribute('aria-expanded', String(open));
+  }
 
   /** Connection notice above everything (e.g. rejoining after the signal dropped); '' hides it. */
   notice(text: string): void {
@@ -52,6 +98,11 @@ export class Hud {
     this.roster.replaceChildren();
     this.labels.replaceChildren();
     this.chips.clear();
+    this.miniDots.clear();
+    const dots = this.rosterMini.querySelector('.mdots') as HTMLElement;
+    dots.replaceChildren();
+    this.rosterMini.setAttribute('aria-label', t('playersHold'));
+    this.openRoster(false);
     this.tags.clear();
     for (const p of state.players) {
       const color = PLAYER_COLORS[p.colorIndex % PLAYER_COLORS.length]!;
@@ -61,6 +112,11 @@ export class Hud {
       (chip.querySelector('.dot') as HTMLElement).style.background = color;
       this.roster.append(chip);
       this.chips.set(p.id, chip);
+      const dot = document.createElement('span');
+      dot.className = p.id === humanId ? 'mdot me' : 'mdot';
+      dot.style.background = color;
+      dots.append(dot);
+      this.miniDots.set(p.id, dot);
 
       const tag = document.createElement('div');
       tag.className = p.id === humanId ? 'tag me' : 'tag';
@@ -175,6 +231,13 @@ export class Hud {
         (chip.querySelector('.name') as HTMLElement).textContent = this.tagText(p, state.time);
         (chip.querySelector('.pts') as HTMLElement).textContent = String(p.score);
         (chip.querySelector('.state') as HTMLElement).textContent = p.eliminated ? t('out') : away ? t('offline') : p.seatId !== null ? t('seated') : t('standing');
+      }
+      const dot = this.miniDots.get(p.id);
+      if (dot) {
+        dot.classList.toggle('out', p.eliminated);
+        dot.classList.toggle('offline', offline.has(p.id) && !p.eliminated);
+        dot.classList.toggle('seated', p.seatId !== null && !p.eliminated);
+        if (p.id === this.humanId) (this.rosterMini.querySelector('.mpts') as HTMLElement).textContent = String(p.score);
       }
       const tag = this.tags.get(p.id);
       if (tag) {

@@ -9,6 +9,7 @@ import { ClientNet, ClientSession, type CloseReason } from './net/client';
 import { botName, HostNet, HostSession } from './net/host';
 import { MessengerTransport, findBridge } from './net/messenger';
 import { installMockMessenger } from './net/mockMessenger';
+import { fetchBoard, hasLeaderboard, reportScore, type Board } from './net/leaderboard';
 import { chatPlayerKey, claimPlayerKey } from './net/playerKey';
 import { cleanName, type LobbyPlayer } from './net/protocol';
 import { RtcHostTransport, RtcJoinTransport, type JoinStage } from './net/rtc/room';
@@ -33,7 +34,7 @@ const NEXT_GAME_DELAY_S = 8;
 const REJOIN_WINDOW_MS = 30 * 60 * 1000;
 
 type Mode = 'menu' | 'lobby' | 'playing' | 'paused' | 'over';
-type Screen = 'menu' | 'howto' | 'pause' | 'gameover' | 'settingsScreen' | 'joinScreen' | 'lobby';
+type Screen = 'menu' | 'howto' | 'pause' | 'gameover' | 'settingsScreen' | 'joinScreen' | 'lobby' | 'boardScreen';
 
 /** The multiplayer connection, when there is one. */
 type Net =
@@ -82,6 +83,7 @@ class App {
     setLang(this.settings.lang ?? detectLang(navigator.languages ?? [navigator.language]));
     setSoundEnabled(this.settings.sound);
     this.controls.setSensitivity(this.settings.sensitivity);
+    this.applyControlSettings();
     onLangChange(() => this.applyTexts());
     this.applyTexts();
     this.bindUi();
@@ -117,6 +119,8 @@ class App {
 
   /** This tab's player key (see net/playerKey.ts). */
   private readonly playerKey: Promise<string> = claimPlayerKey(this.settings.playerKey);
+  /** Key the leaderboard knows this player by (the chat user's key inside the messenger). */
+  private boardKey: Promise<string> = this.playerKey;
 
   /** Whether friends can currently reach our room (host with a room code). */
   private relayUp: () => boolean = () => true;
@@ -309,7 +313,13 @@ class App {
     for (const e of events) {
       if (e.type === 'doorsOpen') play('chime');
       if (e.type === 'pushed' && (e.by === me || e.target === me)) play('push');
-      if (e.type === 'sat' && e.playerId === me) play('sit');
+      if (e.type === 'sat' && e.playerId === me) {
+        play('sit');
+        this.buzz(15);
+      }
+      if (e.type === 'seatKick' && (e.by === me || e.target === me)) this.buzz(e.target === me ? [40, 30, 40] : 30);
+      if (e.type === 'pushed' && e.target === me) this.buzz(35);
+      if (e.type === 'slipped' && e.playerId === me) this.buzz([20, 20, 60]);
       if (e.type === 'kicked' && e.playerId === me) play('kick');
       if (e.type === 'suddenBrake') play('brake');
       if (e.type === 'powerUp' && e.playerId === me) play('pickup');
@@ -424,6 +434,7 @@ class App {
       this.net = { kind: 'host', host, code: null, messenger: transport };
       this.renderLobby(host.players);
     } else {
+      this.boardKey = Promise.resolve(chatPlayerKey(init.self.id));
       const client = new ClientNet(transport, init.session.hostId, myName, chatPlayerKey(init.self.id), this.clientCallbacks());
       this.net = { kind: 'client', client, code: null, messenger: transport };
     }
@@ -586,7 +597,7 @@ class App {
   // ---------------------------------------------------------------- screens
 
   private show(screen: Screen | null): void {
-    for (const id of ['menu', 'howto', 'pause', 'gameover', 'settingsScreen', 'joinScreen', 'lobby'] as const) $(id).hidden = id !== screen;
+    for (const id of ['menu', 'howto', 'pause', 'gameover', 'settingsScreen', 'joinScreen', 'lobby', 'boardScreen'] as const) $(id).hidden = id !== screen;
   }
 
   private notice(text: string): void {
@@ -639,6 +650,7 @@ class App {
   private syncInstall(): void {
     const embedded = params.get('embed') === 'messenger';
     $('btnInstall').hidden = embedded || !canInstall();
+    $('btnBoard').hidden = !hasLeaderboard();
     $('iosInstallHint').hidden = embedded || !needsIosHint();
   }
 
@@ -670,6 +682,7 @@ class App {
         return li;
       }),
     );
+    void this.reportToBoard(g, me);
     const client = this.net?.kind === 'client';
     $('btnAgain').hidden = client;
     $('overWait').hidden = false;
@@ -688,6 +701,59 @@ class App {
     };
     tick();
     this.nextGameTimer = window.setInterval(tick, 1000);
+  }
+
+  /** Sends this player's points to the shared leaderboard and shows the rank. */
+  private async reportToBoard(g: GameState, me: string | null): Promise<void> {
+    const el = $('overRank');
+    el.hidden = true;
+    const p = me ? g.players.find((q) => q.id === me) : undefined;
+    if (!p || !hasLeaderboard() || p.score <= 0) return;
+    const board = await reportScore(await this.boardKey, p.name, p.score, g.winnerId === p.id);
+    if (!board?.me || this.mode !== 'over') return;
+    el.textContent = t('yourRank', { n: board.me.rank, total: board.total, best: board.me.score });
+    el.hidden = false;
+  }
+
+  private async openBoard(): Promise<void> {
+    this.show('boardScreen');
+    $('boardInfo').textContent = t('loading');
+    $('boardList').replaceChildren();
+    $('boardMe').hidden = true;
+    const board = await fetchBoard(await this.boardKey);
+    if (this.mode !== 'menu' || $('boardScreen').hidden) return;
+    this.renderBoard(board);
+  }
+
+  private renderBoard(board: Board | null): void {
+    if (!board) {
+      $('boardInfo').textContent = t('boardOffline');
+      return;
+    }
+    $('boardInfo').textContent = board.top.length ? t('boardInfo') : t('boardEmpty');
+    const mine = board.me;
+    $('boardList').replaceChildren(
+      ...board.top.map((r, i) => {
+        const li = document.createElement('li');
+        if (mine && mine.rank === i + 1) li.className = 'me';
+        const rank = document.createElement('span');
+        rank.className = 'rank';
+        rank.textContent = i < 3 ? ['🥇', '🥈', '🥉'][i]! : String(i + 1);
+        const name = document.createElement('b');
+        name.textContent = r.name;
+        const wins = document.createElement('span');
+        wins.className = 'wins';
+        wins.textContent = t('boardWins', { n: r.wins });
+        const pts = document.createElement('span');
+        pts.className = 'pts';
+        pts.textContent = t('points', { n: r.score });
+        li.append(rank, name, wins, pts);
+        return li;
+      }),
+    );
+    const me = $('boardMe');
+    me.hidden = !mine || mine.rank <= board.top.length;
+    if (mine) me.textContent = t('yourRank', { n: mine.rank, total: board.total, best: mine.score });
   }
 
   private playAgain(): void {
@@ -720,9 +786,32 @@ class App {
     mark('segSound', isSoundEnabled() ? 'on' : 'off');
     mark('segSound2', isSoundEnabled() ? 'on' : 'off');
     mark('segDifficulty', this.settings.difficulty);
+    mark('segCtlSize', this.settings.ctlSize);
+    mark('segCtlSide', this.settings.ctlSide);
+    mark('segCtlMode', this.settings.ctlMode);
+    mark('segVibrate', this.settings.vibrate ? 'on' : 'off');
+    $('rowVibrate').hidden = !('vibrate' in navigator);
     $<HTMLInputElement>('inpSens').value = String(this.settings.sensitivity);
     $<HTMLInputElement>('inpSens2').value = String(this.settings.sensitivity);
     $<HTMLInputElement>('inpName').value = this.settings.name;
+  }
+
+  private applyControlSettings(): void {
+    const c = document.body.classList;
+    c.toggle('ctl-s', this.settings.ctlSize === 's');
+    c.toggle('ctl-l', this.settings.ctlSize === 'l');
+    c.toggle('ctl-swap', this.settings.ctlSide === 'right');
+    this.controls.setFixed(this.settings.ctlMode === 'fixed');
+  }
+
+  /** Short vibration on phones that support it (and when it is switched on). */
+  private buzz(ms: number | number[]): void {
+    if (!this.settings.vibrate) return;
+    try {
+      navigator.vibrate?.(ms);
+    } catch {
+      /* not allowed */
+    }
   }
 
   private save(): void {
@@ -773,6 +862,14 @@ class App {
     on('btnHowToClose', () => this.show('menu'));
     on('btnSettings', () => this.show('settingsScreen'));
     on('btnSettingsClose', () => this.show('menu'));
+    on('btnBoard', () => void this.openBoard());
+    // Esc pauses (and resumes) a game.
+    window.addEventListener('keydown', (e) => {
+      if (e.code !== 'Escape' || e.repeat || this.tips.blocking) return;
+      if (this.mode === 'playing') this.pause();
+      else if (this.mode === 'paused') this.resume();
+    });
+    on('btnBoardClose', () => this.show('menu'));
     on('btnTipsReset', () => {
       this.tips.reset();
       $('btnTipsReset').textContent = t('tipsReset');
@@ -803,6 +900,22 @@ class App {
     seg('segSound', sound);
     seg('segSound2', sound);
     seg('segDifficulty', (v) => (this.settings.difficulty = v === 'easy' ? 'easy' : 'normal'));
+    seg('segCtlSize', (v) => {
+      this.settings.ctlSize = v === 's' || v === 'l' ? v : 'm';
+      this.applyControlSettings();
+    });
+    seg('segCtlSide', (v) => {
+      this.settings.ctlSide = v === 'right' ? 'right' : 'left';
+      this.applyControlSettings();
+    });
+    seg('segCtlMode', (v) => {
+      this.settings.ctlMode = v === 'fixed' ? 'fixed' : 'floating';
+      this.applyControlSettings();
+    });
+    seg('segVibrate', (v) => {
+      this.settings.vibrate = v === 'on';
+      if (this.settings.vibrate) this.buzz(20);
+    });
     for (const id of ['inpSens', 'inpSens2']) {
       $<HTMLInputElement>(id).addEventListener('input', (e) => {
         this.settings.sensitivity = Number((e.target as HTMLInputElement).value);

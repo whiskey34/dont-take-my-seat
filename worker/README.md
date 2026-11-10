@@ -6,6 +6,7 @@ Worker kecil ini punya dua tugas:
 |---|---|
 | `GET /room/<topik>` (WebSocket, port 443) | Tempat bertemu pemain dengan kode room yang sama. Satu kode room = satu Durable Object. Isi pesan sudah dienkripsi dengan kode room, jadi Worker tidak bisa membacanya. |
 | `GET /turn` | Kredensial **Cloudflare TURN** yang berlaku 4 jam (port 443, 80, 3478, 5349). Ini yang membuat HP di Indosat, XL, Biznet, dll. tetap bisa tersambung walau port langsung diblokir. |
+| `GET /scores`, `POST /scores` | **Papan peringkat**: poin terbaik dan jumlah menang per perangkat, disimpan di SQLite milik Durable Object `Leaderboard` (gratis, tidak perlu membuat database terpisah). |
 | `GET /` | Cek hidup (`dtms-signal ok`). |
 
 Game tetap berjalan tanpa Worker (pakai relay publik + STUN), tetapi dengan Worker koneksi jauh lebih stabil. Relay publik tetap dipakai bersamaan sebagai cadangan.

@@ -68,4 +68,5 @@ jobs:
           url=$(grep -oE 'https://[a-z0-9.-]+\.workers\.dev' deploy.log | head -1)
           curl -fsS "$url/"
           echo
+          curl -fsS -H 'Origin: https://whiskey34.github.io' "$url/scores" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const j=JSON.parse(s);console.log("Leaderboard OK, players:",j.total)})'
           curl -fsS -H 'Origin: https://whiskey34.github.io' "$url/turn" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const j=JSON.parse(s);console.log("TURN enabled:",j.turn,"servers:",j.iceServers.flatMap(x=>[].concat(x.urls)).join(" "))})'

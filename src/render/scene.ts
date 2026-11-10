@@ -28,11 +28,28 @@ interface PlayerView {
   visible: number; // 0..1 fade
   kick: { at: number; dir: THREE.Vector3 } | null; // kicking someone
   flight: { at: number; from: THREE.Vector3; until: number } | null; // kicked off a seat
+  stars: THREE.Group; // dizzy stars over the head after being kicked
+  dazed: boolean;
 }
+
+/** A small five-pointed star for the dizzy effect. */
+const starGeo = (() => {
+  const sh = new THREE.Shape();
+  for (let i = 0; i < 10; i++) {
+    const r = i % 2 === 0 ? 0.12 : 0.052;
+    const a = (i / 10) * Math.PI * 2 + Math.PI / 2;
+    const x = Math.cos(a) * r;
+    const y = Math.sin(a) * r;
+    if (i === 0) sh.moveTo(x, y);
+    else sh.lineTo(x, y);
+  }
+  return new THREE.ExtrudeGeometry(sh, { depth: 0.025, bevelEnabled: true, bevelThickness: 0.01, bevelSize: 0.01, bevelSegments: 2 });
+})();
+const starMat = new THREE.MeshBasicMaterial({ color: '#ffd23f' });
 
 /** Seat-kick animation timings (seconds, render clock). */
 const KICK_POSE = 0.42;
-const KICK_FLIGHT = 0.38;
+const KICK_FLIGHT = 0.6;
 
 
 /** Owns everything Three.js. Reads game state; never changes it. */
@@ -301,10 +318,20 @@ export class TrainScene {
       shield.position.y = 0.62;
       shield.visible = false;
       fig.root.add(shield);
+      const stars = new THREE.Group();
+      for (let i = 0; i < 3; i++) {
+        const st = new THREE.Mesh(starGeo, starMat);
+        const a = (i / 3) * Math.PI * 2;
+        st.position.set(Math.cos(a) * 0.28, 0, Math.sin(a) * 0.28);
+        stars.add(st);
+      }
+      stars.position.y = 1.42;
+      stars.visible = false;
+      fig.root.add(stars);
       fig.root.position.set(p.pos.x, 0, p.pos.z);
       fig.root.rotation.order = 'YXZ'; // lean follows the facing direction
       this.scene.add(fig.root);
-      this.players.set(p.id, { fig, ring, shield, visible: 1, kick: null, flight: null });
+      this.players.set(p.id, { fig, ring, shield, visible: 1, kick: null, flight: null, stars, dazed: false });
     }
   }
 
@@ -474,7 +501,7 @@ export class TrainScene {
       setSeated(v.fig, p.seatId !== null);
       const stunned = state.time < p.stunnedUntil;
       r.rotation.z = stunned ? Math.sin(this.clock * 40) * 0.15 : 0;
-      this.animateKick(v, p);
+      this.animateKick(v, p, stunned);
       if (v.ring) v.ring.visible = p.seatId === null;
       v.shield.visible = state.time < p.shieldUntil && !p.eliminated;
       if (v.shield.visible) v.shield.rotation.z += dt * 3;
@@ -663,8 +690,8 @@ export class TrainScene {
     this.camera.updateProjectionMatrix();
   }
 
-  /** Kicker swings the right leg; the victim hops out of the seat. */
-  private animateKick(v: PlayerView, p: GameState['players'][number]): void {
+  /** Kicker swings the right leg; the victim flies out of the seat, then sees stars. */
+  private animateKick(v: PlayerView, p: GameState['players'][number], stunned: boolean): void {
     const r = v.fig.root;
     if (v.kick) {
       const u = (this.clock - v.kick.at) / KICK_POSE;
@@ -687,11 +714,27 @@ export class TrainScene {
       else {
         const to = new THREE.Vector3(p.pos.x, 0, p.pos.z);
         r.position.lerpVectors(v.flight.from, to, 1 - (1 - u) * (1 - u));
-        r.position.y = v.flight.from.y * (1 - u) + Math.sin(Math.PI * u) * 0.35;
+        r.position.y = v.flight.from.y * (1 - u) + Math.sin(Math.PI * u) * 1.1; // flies up in an arc
+        r.rotation.y += Math.PI * 2 * u * 1.5; // tumbling spin
+        r.rotation.z = Math.sin(u * Math.PI * 2) * 0.4;
         setSeated(v.fig, false);
         setStride(v.fig, 0, 0);
-        v.fig.arms[0].rotation.x = v.fig.arms[1].rotation.x = -1.4 * Math.sin(Math.PI * u); // arms flung up
+        v.fig.arms[0].rotation.x = v.fig.arms[1].rotation.x = -2.2 * Math.sin(Math.PI * u); // arms flung up
+        v.fig.legs[0].rotation.x = 0.5 * Math.sin(Math.PI * u);
+        v.fig.legs[1].rotation.x = -0.5 * Math.sin(Math.PI * u);
       }
+      v.dazed = true;
+    }
+    // Dizzy stars spin over the head while still dazed from the kick.
+    if (!stunned) v.dazed = false;
+    v.stars.visible = v.dazed && !p.eliminated;
+    if (v.stars.visible) {
+      v.stars.rotation.y = this.clock * 5 - r.rotation.y; // keep orbiting the same way however the body turns
+      v.stars.position.y = (p.seatId !== null ? 1.6 : 1.42) + Math.sin(this.clock * 8) * 0.03;
+      v.stars.children.forEach((st, i) => {
+        st.rotation.y = -v.stars.rotation.y - r.rotation.y; // face roughly toward the camera
+        st.rotation.z = this.clock * 4 + i;
+      });
     }
   }
 
