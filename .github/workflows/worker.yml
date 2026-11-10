@@ -30,7 +30,7 @@ jobs:
       run:
         working-directory: worker
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - if: env.CLOUDFLARE_API_TOKEN == ''
         run: echo "::warning::CLOUDFLARE_API_TOKEN is not set; skipping the Worker deploy (see worker/README.md)."
       - uses: actions/setup-node@v4
