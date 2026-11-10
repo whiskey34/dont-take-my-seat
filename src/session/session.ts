@@ -46,7 +46,7 @@ export class Simulation {
    */
   advance(dt: number, inputFor: (id: PlayerId, first: boolean) => PlayerInput): GameEvent[] {
     const events: GameEvent[] = [];
-    this.acc = Math.min(this.acc + dt, DT * 8);
+    this.acc = Math.min(this.acc + dt, DT * 15); // catch up after slow frames (up to 0.25 s)
     let first = true;
     while (this.acc >= DT) {
       this.snapshotPrev();

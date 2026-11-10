@@ -18,6 +18,9 @@ export type TipId =
   | 'oneSideDoors'
   | 'kickFight'
   | 'puddles'
+  | 'rushHour'
+  | 'seatMove'
+  | 'npcKick'
   | 'priority'
   | 'warmup'
   | 'seatsShort'
@@ -32,6 +35,9 @@ export const TIP_IDS: readonly TipId[] = [
   'oneSideDoors',
   'kickFight',
   'puddles',
+  'rushHour',
+  'seatMove',
+  'npcKick',
   'priority',
   'warmup',
   'seatsShort',
@@ -54,6 +60,9 @@ const KIND: Record<TipId, 'item' | 'challenge' | 'rule'> = {
   oneSideDoors: 'challenge',
   kickFight: 'challenge',
   puddles: 'challenge',
+  rushHour: 'challenge',
+  seatMove: 'challenge',
+  npcKick: 'rule',
   priority: 'rule',
   warmup: 'rule',
   seatsShort: 'rule',
@@ -72,6 +81,9 @@ const ICON: Record<TipId, string> = {
   oneSideDoors: '🚪',
   kickFight: '🦶',
   puddles: '💧',
+  rushHour: '🚨',
+  seatMove: '🔴',
+  npcKick: '👮',
   priority: '🪑',
   warmup: '🪑',
   seatsShort: '🪑',
@@ -123,7 +135,7 @@ export class Tips {
         if (isFinalStop(state)) this.add('finalStop', { el: 'board' });
         const ch = e.kind;
         if (ch === 'puddles' && state.puddles[0]) this.add('puddles', { world: { x: state.puddles[0].x, y: 0, z: state.puddles[0].z } });
-        else if (ch === 'crowd' && state.standers[0]) this.add('crowd', { world: { ...xz(state.standers[0].pos), y: 1 } });
+        else if ((ch === 'crowd' || ch === 'rushHour') && state.standers[0]) this.add(ch, { world: { ...xz(state.standers[0].pos), y: 1 } });
         else this.add(ch, { el: 'board' });
       }
       if (e.type === 'doorsOpen') {
@@ -132,6 +144,13 @@ export class Tips {
         else if (!isFinalStop(state)) this.add('seatsShort', { el: 'seatsLeft' });
         const trap = state.trapSeatId === null ? undefined : state.seats[state.trapSeatId];
         if (trap) this.add('priority', { world: { x: trap.x, y: 0.7, z: trap.side * 1.85 } });
+        // Seated passengers can be kicked off (at a cost): explain once, the first time it matters.
+        const npc = state.seats.find((seat) => seat.npc && !seat.priority);
+        if (npc && !isFinalStop(state) && seatsThisStop(state) < alive) this.add('npcKick', { world: { x: npc.x, y: 0.9, z: npc.side * 1.85 } });
+      }
+      if (e.type === 'seatMoveWarn') {
+        const seat = state.seats[e.seatIds[0] ?? -1];
+        if (seat) this.add('seatMove', { world: { x: seat.x, y: 0.7, z: seat.side * 1.85 } });
       }
     }
     // Items: the first time each kind lies on the floor.

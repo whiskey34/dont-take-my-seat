@@ -34,6 +34,16 @@ export interface Player {
   score: number; // points, carried from game to game in one session
   boostUntil: number; // iced coffee: runs faster until then
   slipUntil: number; // slipped on a puddle: sliding, out of control until then
+  /** Times caught kicking a seated passenger this game (2nd time: taken off the train). */
+  npcStrikes: number;
+}
+
+/** Mini event: these seats turn into priority seats at `at` (blinking red before). */
+export interface SeatMove {
+  seatIds: number[];
+  at: number;
+  warned: boolean;
+  done: boolean;
 }
 
 export interface Seat {
@@ -48,8 +58,11 @@ export interface Seat {
 export type Phase = 'intro' | 'riding' | 'scramble' | 'result' | 'gameOver';
 
 /** One random challenge per station. */
-export type ChallengeKind = 'suddenBrake' | 'crowd' | 'oneSideDoors' | 'kickFight' | 'puddles';
+export type ChallengeKind = 'suddenBrake' | 'crowd' | 'oneSideDoors' | 'kickFight' | 'puddles' | 'rushHour';
+/** The everyday challenges, one picked at random per stop. */
 export const CHALLENGE_KINDS: readonly ChallengeKind[] = ['suddenBrake', 'crowd', 'oneSideDoors', 'kickFight', 'puddles'];
+/** Every kind, including the special events (for checking network data). */
+export const ALL_CHALLENGES: readonly ChallengeKind[] = [...CHALLENGE_KINDS, 'rushHour'];
 
 /** A wet patch on the floor: slippery while you stand in it. */
 export interface Puddle {
@@ -58,7 +71,7 @@ export interface Puddle {
   r: number;
 }
 
-export type PointsReason = 'round' | 'win' | 'kick';
+export type PointsReason = 'round' | 'win' | 'kick' | 'penalty';
 
 export type PowerUpKind = 'earphones' | 'sleep' | 'coffee';
 export const POWER_UP_KINDS: readonly PowerUpKind[] = ['earphones', 'sleep', 'coffee'];
@@ -91,6 +104,10 @@ export interface GameState {
   freeSeatIds: number[];
   /** A priority seat left open as a trap, or null. */
   trapSeatId: number | null;
+  /** Mini event "the priority seat moves", if scheduled for this stop. */
+  seatMove: SeatMove | null;
+  /** Rush hours so far this game (at most 2). */
+  rushHours: number;
   winnerId: PlayerId | null;
   rngState: number;
   challenge: ChallengeKind | null;
@@ -121,6 +138,10 @@ export type GameEvent =
   | { type: 'slept'; playerId: PlayerId; seatId: number }
   | { type: 'seatKick'; by: PlayerId; target: PlayerId; seatId: number }
   | { type: 'slipped'; playerId: PlayerId }
+  | { type: 'npcKick'; playerId: PlayerId; seatId: number; strike: number }
+  | { type: 'escorted'; playerId: PlayerId; seatId: number }
+  | { type: 'seatMoveWarn'; seatIds: number[] }
+  | { type: 'seatMoved'; seatIds: number[] }
   | { type: 'points'; playerId: PlayerId; amount: number; reason: PointsReason };
 
 export interface PlayerSetup {

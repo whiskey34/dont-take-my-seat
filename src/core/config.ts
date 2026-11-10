@@ -66,6 +66,23 @@ export const CONFIG = {
     slipGrip: 1.3, // …and slows down this gently (normal grip is 12)
     slipTime: 0.8, // no control while sliding
     slipAgainAfter: 0.5, // seconds back on your feet before you can slip again
+    // Rush hour (special event): the aisle fills with standing passengers.
+    rushChance: 0.25, // per stop (not the first or the last)
+    rushMax: 2, // per game
+    rushCount: 12,
+    rushLane: 0.55, // they stay in the middle of the aisle, clear of the seats
+    rushSqueeze: 0.3, // how much of an overlap is pushed back per tick (1 = solid)
+    rushDrag: 0.55, // speed kept while squeezing through
+    rushExtraTime: 4, // longer scramble
+    // Mini event: the priority seat moves.
+    seatMoveChance: 0.3,
+    seatMoveAfter: [2, 3.5], // seconds after the doors open
+    seatMoveWarn: 1.5, // blinking red before it switches
+    seatMoveExtraTime: 3,
+    seatMoveGrace: 0.8, // extra time on top of the priority delay before you are asked to stand
+    // Kicking a seated passenger: allowed, but the staff notice.
+    npcKickRange: 0.6,
+    npcKickPenalty: 20,
   },
 
   points: {

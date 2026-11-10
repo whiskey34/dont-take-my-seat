@@ -1,5 +1,5 @@
 /** Tiny synthesized sound effects: no audio files to download. */
-type Sound = 'chime' | 'push' | 'sit' | 'out' | 'win' | 'kick' | 'tick' | 'brake' | 'pickup' | 'block';
+type Sound = 'chime' | 'push' | 'sit' | 'out' | 'win' | 'kick' | 'tick' | 'brake' | 'pickup' | 'block' | 'whistle';
 
 let ctx: AudioContext | null = null;
 let enabled = true;
@@ -49,6 +49,10 @@ export function play(sound: Sound): void {
     case 'sit':
       tone(520, 0, 0.09, 'triangle', 0.18);
       tone(780, 0.07, 0.12, 'triangle', 0.18);
+      break;
+    case 'whistle': // officer's whistle: two sharp trills
+      for (let i = 0; i < 6; i++) tone(i % 2 ? 2650 : 2900, i * 0.045, 0.06, 'square', 0.05);
+      tone(2800, 0.33, 0.4, 'square', 0.06);
       break;
     case 'kick':
       tone(300, 0, 0.25, 'sawtooth', 0.1, 150);

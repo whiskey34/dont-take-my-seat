@@ -167,3 +167,80 @@ export function setStride(f: Figure, phase: number, amount: number): void {
 export function setHair(f: Figure, color: string): void {
   if (f.hair) (f.hair.material as THREE.MeshLambertMaterial).color.set(color);
 }
+
+// ----------------------------------------------------------------- officer
+
+const vestGeo = new THREE.SphereGeometry(0.21, 26, 16, 0, Math.PI * 2, Math.PI * 0.24, Math.PI * 0.58);
+/** Reflective bands: thin slices of a slightly bigger shell. */
+const bandGeo = new THREE.SphereGeometry(0.216, 26, 2, 0, Math.PI * 2, Math.PI * 0.6, Math.PI * 0.07);
+const strapGeo = new THREE.SphereGeometry(0.216, 3, 12, 0, Math.PI * 0.075, Math.PI * 0.25, Math.PI * 0.36);
+const capGeo = new THREE.CylinderGeometry(0.2, 0.235, 0.13, 24);
+const capTopGeo = new THREE.SphereGeometry(0.2, 24, 8, 0, Math.PI * 2, 0, Math.PI / 2);
+const brimGeo = new THREE.CylinderGeometry(0.16, 0.16, 0.02, 20, 1, false, -Math.PI / 2, Math.PI);
+const badgeGeo = new THREE.CircleGeometry(0.03, 12);
+const maskGeo = new THREE.SphereGeometry(0.262, 20, 8, Math.PI * 0.18, Math.PI * 0.64, Math.PI * 0.55, Math.PI * 0.22);
+
+export const OFFICER = {
+  shirt: '#cdb877', // khaki, a little yellow
+  vest: '#ff6a13',
+  stripe: '#f4f24a',
+  cap: '#1a1c20',
+  trousers: '#22262e',
+  mask: '#f2f7ff',
+  skin: '#e0ad84',
+};
+
+/**
+ * A KRL station officer: khaki shirt, orange safety vest with yellow
+ * reflective stripes, dark trousers, black cap with a small badge, and a mask.
+ */
+export function createOfficer(): Figure {
+  const f = createFigure(OFFICER.shirt, OFFICER.skin, false, 3); // look 3 = no hair (the cap covers it)
+  const lambert = (c: string) => new THREE.MeshLambertMaterial({ color: c });
+  // Khaki sleeves, skin-coloured hands.
+  const shirt = lambert(OFFICER.shirt);
+  for (const arm of f.arms) (arm.children[0] as THREE.Mesh).material = shirt;
+  const trousers = lambert(OFFICER.trousers);
+  for (const leg of f.legs) (leg.children[0] as THREE.Mesh).material = trousers;
+
+  const vest = new THREE.Mesh(vestGeo, lambert(OFFICER.vest));
+  vest.position.copy(f.body.position);
+  vest.scale.copy(f.body.scale);
+  const stripe = new THREE.MeshBasicMaterial({ color: OFFICER.stripe }); // bright, like reflective tape
+  const band = new THREE.Mesh(bandGeo, stripe);
+  vest.add(band);
+  const band2 = new THREE.Mesh(bandGeo, stripe);
+  band2.rotation.x = 0; // a second band higher up
+  band2.position.y = 0.055;
+  band2.scale.setScalar(0.985);
+  vest.add(band2);
+  // Vertical stripes over the shoulders, front and back.
+  for (const phi of [Math.PI * 0.32, Math.PI * 0.6, Math.PI * 1.32, Math.PI * 1.6]) {
+    const strap = new THREE.Mesh(strapGeo, stripe);
+    strap.rotation.y = -phi;
+    vest.add(strap);
+  }
+  f.upper.add(vest);
+
+  const capMat = lambert(OFFICER.cap);
+  const cap = new THREE.Group();
+  const crown = new THREE.Mesh(capGeo, capMat);
+  const top = new THREE.Mesh(capTopGeo, capMat);
+  top.scale.y = 0.35;
+  top.position.y = 0.06;
+  const brim = new THREE.Mesh(brimGeo, capMat);
+  brim.position.set(0, -0.05, 0.17);
+  brim.rotation.x = 0.12;
+  const badge = new THREE.Mesh(badgeGeo, new THREE.MeshBasicMaterial({ color: '#e8c547' }));
+  badge.position.set(0, 0.0, 0.226);
+  badge.rotation.x = -0.15;
+  cap.add(crown, top, brim, badge);
+  cap.position.y = 0.2;
+  cap.rotation.x = -0.08;
+  f.head.add(cap);
+
+  const mask = new THREE.Mesh(maskGeo, new THREE.MeshLambertMaterial({ color: OFFICER.mask, emissive: '#5a6b7d', emissiveIntensity: 0.35 }));
+  mask.rotation.y = 0; // centred on the face (+z)
+  f.head.add(mask);
+  return f;
+}

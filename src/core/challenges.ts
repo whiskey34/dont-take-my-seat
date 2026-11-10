@@ -10,6 +10,8 @@ import { CHALLENGE_KINDS, POWER_UP_KINDS, type GameEvent, type GameState, type P
  * - oneSideDoors: only one side's doors open; new passengers board there and block it.
  * - kickFight: the action button can kick a seated player off their seat.
  * - puddles: wet patches on the floor; you slide when you run through them.
+ * - rushHour (special event, at most twice a game, never at the first or last
+ *   stop): the aisle is packed with standing passengers; you squeeze through slowly.
  * One power-up lies on the floor every stop.
  */
 const C = CONFIG.challenge;
@@ -32,8 +34,16 @@ export function startChallenge(s: GameState, events: GameEvent[]): void {
   s.brakeUntil = 0;
   s.doorSide = 0;
   s.puddles = [];
-  const kind = CHALLENGE_KINDS[Math.floor(rand(s) * CHALLENGE_KINDS.length)] ?? 'suddenBrake';
+  const rush = s.round >= 1 && s.round + 2 < s.route.length && s.rushHours < C.rushMax && rand(s) < C.rushChance;
+  const kind = rush ? 'rushHour' : (CHALLENGE_KINDS[Math.floor(rand(s) * CHALLENGE_KINDS.length)] ?? 'suddenBrake');
   s.challenge = kind;
+  if (rush) {
+    s.rushHours++;
+    for (let i = 0; i < C.rushCount; i++) {
+      const x = -car.halfLength + 1.6 + ((i + 0.5) / C.rushCount) * (car.halfLength * 2 - 3.2) + between(s, -0.4, 0.4);
+      addStander(s, { x, z: between(s, -C.rushLane, C.rushLane) });
+    }
+  }
   if (kind === 'suddenBrake') s.brakeAt = s.time + between(s, C.brakeWindow[0], C.brakeWindow[1]);
   if (kind === 'crowd') {
     for (let i = 0; i < C.crowdCount; i++) {
@@ -101,7 +111,10 @@ export function collectPowerUps(s: GameState, events: GameEvent[]): void {
 
 /** Pushes a standing player out of every standing passenger. */
 export function keepOutOfStanders(s: GameState, p: Player): void {
-  const min = P.radius + C.standerRadius;
+  // Rush hour: bodies give a little, so you can squeeze between them (slowly).
+  const rush = s.challenge === 'rushHour';
+  const min = P.radius + C.standerRadius - (rush ? C.rushSqueeze : 0);
+  let squeezed = false;
   for (const st of s.standers) {
     const dx = p.pos.x - st.pos.x;
     const dz = p.pos.z - st.pos.z;
@@ -117,6 +130,11 @@ export function keepOutOfStanders(s: GameState, p: Player): void {
       p.vel.x -= vn * nx;
       p.vel.z -= vn * nz;
     }
+    squeezed = true;
+  }
+  if (rush && squeezed) {
+    p.vel.x *= C.rushDrag;
+    p.vel.z *= C.rushDrag;
   }
 }
 
@@ -132,7 +150,9 @@ function addStander(s: GameState, pos: Vec2): Stander {
 
 function moveStander(s: GameState, st: Stander, dt: number): void {
   if (s.time >= st.moveAt) {
-    st.target = clampAisle({ x: st.pos.x + between(s, -1.6, 1.6), z: between(s, -0.9, 0.9) });
+    const rush = s.challenge === 'rushHour';
+    const lane = rush ? C.rushLane : 0.9;
+    st.target = clampAisle({ x: st.pos.x + between(s, rush ? -0.6 : -1.6, rush ? 0.6 : 1.6), z: between(s, -lane, lane) });
     st.moveAt = s.time + between(s, 2, 3.5);
   }
   const dx = st.target.x - st.pos.x;

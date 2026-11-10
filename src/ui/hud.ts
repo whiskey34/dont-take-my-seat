@@ -1,5 +1,5 @@
 import { CONFIG } from '../core/config';
-import { isFinalStop, kickBeatsSitting, pushTarget, seatInReach, seatKickTarget, trainAccel } from '../core/game';
+import { isFinalStop, kickBeatsSitting, npcKickSeat, pushTarget, seatInReach, seatKickTarget, trainAccel } from '../core/game';
 import type { GameEvent, GameState, Player } from '../core/types';
 import { t } from '../i18n';
 import { PLAYER_COLORS } from '../render/palette';
@@ -174,6 +174,26 @@ export class Hud {
           else if (e.target === me) this.flash(t('gotKicked', { name: name(e.by) }), 'bad', 1600);
           break;
         }
+        case 'seatMoveWarn':
+          this.flash(t('seatMoveWarn'), 'warn', 1500);
+          break;
+        case 'seatMoved': {
+          const mine = state.players.find((p) => p.id === me);
+          if (mine && mine.seatId !== null && e.seatIds.includes(mine.seatId)) this.flash(t('seatMovedMine'), 'bad', 1800);
+          break;
+        }
+        case 'npcKick': {
+          if (e.strike >= 2) break; // 'escorted' says it
+          const name = state.players.find((p) => p.id === e.playerId)?.name ?? e.playerId;
+          if (e.playerId === me) this.flash(t('npcKick1', { n: CONFIG.challenge.npcKickPenalty }), 'bad', 2400);
+          else this.flash(t('npcKickOther', { name }), 'plain', 1800);
+          break;
+        }
+        case 'escorted': {
+          const name = state.players.find((p) => p.id === e.playerId)?.name ?? e.playerId;
+          this.flash(e.playerId === me ? t('escortedMe') : t('escortedOther', { name }), e.playerId === me ? 'bad' : 'plain', 2600);
+          break;
+        }
         case 'points': {
           const chip = this.chips.get(e.playerId);
           const pts = chip?.querySelector<HTMLElement>('.pts');
@@ -193,6 +213,9 @@ export class Hud {
     }
   }
 
+  private phaseKey = '';
+  private phaseTotal = 0;
+
   private flash(text: string, kind: 'good' | 'bad' | 'warn' | 'plain' | 'none', ms: number): void {
     window.clearTimeout(this.bannerTimer);
     this.banner.textContent = text;
@@ -211,7 +234,14 @@ export class Hud {
     this.boardChallenge.textContent = ch;
     this.boardChallenge.hidden = !ch;
     this.board.classList.toggle('scramble', state.phase === 'scramble');
-    const total = PHASE_LENGTH[state.phase];
+    this.board.classList.toggle('rush', state.challenge === 'rushHour' && (state.phase === 'riding' || state.phase === 'scramble'));
+    // Special events make the scramble longer than usual.
+    const key = `${state.phase}:${state.round}`;
+    if (key !== this.phaseKey) {
+      this.phaseKey = key;
+      this.phaseTotal = Math.max(PHASE_LENGTH[state.phase] ?? 0, Number.isFinite(state.phaseEndsAt) ? state.phaseEndsAt - state.time : 0);
+    }
+    const total = this.phaseTotal;
     const left = total ? Math.max(0, state.phaseEndsAt - state.time) / total : 0;
     this.timerFill.style.transform = `scaleX(${left.toFixed(3)})`;
 
@@ -273,7 +303,7 @@ export class Hud {
     const free = seatInReach(state, me);
     const kickFirst = !!free && kickBeatsSitting(state, me, free);
     const canSit = !!free && !kickFirst;
-    const canKick = !canSit && !!seatKickTarget(state, me);
+    const canKick = !canSit && (!!seatKickTarget(state, me) || (!!npcKickSeat(state, me) && !pushTarget(state, me)));
     this.actionBtn.classList.toggle('sit', canSit);
     this.actionBtn.classList.toggle('kick', canKick);
     this.actionLabel.textContent = canSit ? t('sit') : canKick || state.challenge === 'kickFight' ? t('kick') : t('push');
@@ -299,6 +329,8 @@ export function challengeText(state: GameState): string {
       return t('chKick');
     case 'puddles':
       return t('chPuddles');
+    case 'rushHour':
+      return t('chRush');
     default:
       return '';
   }

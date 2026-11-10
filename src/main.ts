@@ -263,14 +263,19 @@ class App {
   private backgroundTick(): void {
     if (!document.hidden || this.session.kind !== 'host') return;
     const now = performance.now();
-    const dt = Math.min(0.1, (now - this.last) / 1000);
+    const dt = Math.min(0.25, (now - this.last) / 1000);
     this.last = now;
     const events = this.session.update(dt, NO_INPUT);
     if (events.length) this.onEvents(this.session.view(), events);
   }
 
   private frame = (now: number) => {
-    const dt = Math.min(0.1, (now - this.last) / 1000);
+    // The game clock may catch up after a slow frame (up to 0.25 s), so a
+    // host on a slow phone does not slow the game down for everyone.
+    // Animations still step at most 0.1 s at a time.
+    const elapsed = (now - this.last) / 1000;
+    const dt = Math.min(0.1, elapsed);
+    const simDt = this.session.kind === 'client' ? dt : Math.min(0.25, elapsed);
     this.last = now;
     const networked = this.session.kind !== 'local';
     // A tip card pauses a solo game until "Got it"; multiplayer cannot pause.
@@ -281,7 +286,7 @@ class App {
     }
     const running = (!this.isPortrait() || networked ? this.mode !== 'paused' || networked : false) && !tipPause;
     const input = this.mode === 'playing' && !this.isPortrait() && !tipPause ? this.controls.read() : NO_INPUT;
-    const events = running ? this.session.update(dt, input) : [];
+    const events = running ? this.session.update(simDt, input) : [];
     const view = this.session.view();
     if (this.mode === 'playing' && this.session.humanId) this.tips.watch(view, events, this.session.humanId, !networked);
     // Rejoined while on the results screen and the host has already started the next game.
@@ -322,6 +327,10 @@ class App {
       if (e.type === 'slipped' && e.playerId === me) this.buzz([20, 20, 60]);
       if (e.type === 'kicked' && e.playerId === me) play('kick');
       if (e.type === 'suddenBrake') play('brake');
+      if (e.type === 'npcKick' || e.type === 'escorted') play('whistle');
+      if (e.type === 'npcKick' && e.playerId === me) this.buzz([60, 40, 60]);
+      if (e.type === 'escorted' && e.playerId === me) play('out');
+      if (e.type === 'seatMoveWarn') play('tick');
       if (e.type === 'powerUp' && e.playerId === me) play('pickup');
       if (e.type === 'shielded' && e.playerId === me) play('block');
       if (e.type === 'slept' && e.playerId === me) play('pickup');

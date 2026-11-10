@@ -7,6 +7,9 @@ import { NO_INPUT } from './types';
 
 const { car, player: P, push: PUSH, phase: PH } = CONFIG;
 
+/** Where the priority seats normally are (the car corners). */
+const BASE_PRIORITY: readonly boolean[] = createSeats().map((seat) => seat.priority);
+
 export function createGame(setups: readonly PlayerSetup[], seed: number): GameState {
   if (setups.length < 2 || setups.length > CONFIG.maxPlayers) {
     throw new Error(`Need 2-${CONFIG.maxPlayers} players, got ${setups.length}`);
@@ -32,6 +35,7 @@ export function createGame(setups: readonly PlayerSetup[], seed: number): GameSt
     sleeping: false,
     boostUntil: 0,
     slipUntil: 0,
+    npcStrikes: 0,
     score: Math.max(0, Math.floor(s.score ?? 0)),
   }));
   const [route, rngAfterRoute] = pickRoute(seed | 0);
@@ -46,6 +50,8 @@ export function createGame(setups: readonly PlayerSetup[], seed: number): GameSt
     seats: createSeats(),
     freeSeatIds: [],
     trapSeatId: null,
+    seatMove: null,
+    rushHours: 0,
     winnerId: null,
     rngState: rngAfterRoute,
     challenge: null,
@@ -123,6 +129,7 @@ export function step(s: GameState, inputs: ReadonlyMap<PlayerId, PlayerInput>, d
     }
     resolveCollisions(s);
     collectPowerUps(s, events);
+    updateSeatMove(s, events);
     handlePriorityKicks(s, events);
   }
 
@@ -148,7 +155,7 @@ function advancePhase(s: GameState, events: GameEvent[]): void {
       break;
     case 'riding':
       openDoors(s, events);
-      setPhase(s, 'scramble', PH.scramble, events);
+      setPhase(s, 'scramble', PH.scramble + extraScrambleTime(s), events);
       break;
     case 'scramble':
       resolveRound(s, events);
@@ -183,6 +190,9 @@ function startRound(s: GameState, events: GameEvent[]): void {
   }
   s.freeSeatIds = [];
   s.trapSeatId = null;
+  s.seatMove = null;
+  // Priority seats are back in the corners at every stop.
+  s.seats.forEach((seat, i) => (seat.priority = BASE_PRIORITY[i] ?? seat.priority));
   for (const p of s.players) {
     p.seatId = null;
     p.kickAt = null;
@@ -241,7 +251,66 @@ function openDoors(s: GameState, events: GameEvent[]): void {
     if (seat) seat.npc = false;
   }
   boardPassengers(s);
+  scheduleSeatMove(s);
   events.push({ type: 'doorsOpen', seatIds: [...free, ...trap] });
+}
+
+/** Special events give players more time to find a seat. */
+function extraScrambleTime(s: GameState): number {
+  const C = CONFIG.challenge;
+  return (s.challenge === 'rushHour' ? C.rushExtraTime : 0) + (s.seatMove ? C.seatMoveExtraTime : 0);
+}
+
+/**
+ * Mini event "the priority seat moves": now and then, a few seconds into the
+ * scramble, one or two of the open seats blink red and become priority seats,
+ * while the corner priority seat that was open becomes an ordinary one.
+ */
+function scheduleSeatMove(s: GameState): void {
+  const C = CONFIG.challenge;
+  if (s.round < 1 || isFinalStop(s) || s.trapSeatId === null || s.freeSeatIds.length < 2) return;
+  const [r, r1] = nextRandom(s.rngState);
+  s.rngState = r1;
+  if (r >= C.seatMoveChance) return;
+  // Two seats only when there are still enough ordinary seats for everyone.
+  const count = s.freeSeatIds.length - 1 >= alivePlayers(s).length ? 2 : 1;
+  const [ids, r2] = pickDistinct(s.freeSeatIds, count, s.rngState);
+  const [w, r3] = nextRandom(r2);
+  s.rngState = r3;
+  const at = s.time + C.seatMoveAfter[0] + w * (C.seatMoveAfter[1] - C.seatMoveAfter[0]);
+  s.seatMove = { seatIds: ids, at, warned: false, done: false };
+}
+
+function updateSeatMove(s: GameState, events: GameEvent[]): void {
+  const m = s.seatMove;
+  if (!m || m.done || s.phase !== 'scramble') return;
+  if (!m.warned && s.time >= m.at - CONFIG.challenge.seatMoveWarn) {
+    m.warned = true;
+    events.push({ type: 'seatMoveWarn', seatIds: [...m.seatIds] });
+  }
+  if (s.time < m.at) return;
+  m.done = true;
+  // The open corner priority seat turns into an ordinary seat.
+  const trap = s.trapSeatId === null ? undefined : s.seats[s.trapSeatId];
+  if (trap) {
+    trap.priority = false;
+    const sitter = s.players.find((q) => q.seatId === trap.id);
+    if (sitter) sitter.kickAt = null;
+  }
+  for (const id of m.seatIds) {
+    const seat = s.seats[id];
+    if (!seat) continue;
+    seat.priority = true;
+    const p = s.players.find((q) => q.seatId === id);
+    if (!p) continue;
+    if (p.sleeping) {
+      p.sleeping = false;
+      events.push({ type: 'slept', playerId: p.id, seatId: id });
+    } else p.kickAt = s.time + CONFIG.priorityKickDelay + CONFIG.challenge.seatMoveGrace;
+  }
+  s.freeSeatIds = [...s.freeSeatIds.filter((id) => !m.seatIds.includes(id)), ...(trap ? [trap.id] : [])];
+  s.trapSeatId = m.seatIds[0] ?? null;
+  events.push({ type: 'seatMoved', seatIds: [...m.seatIds] });
 }
 
 /** Nothing left to decide: every open seat is taken, or every player sits. */
@@ -274,7 +343,7 @@ function resolveRound(s: GameState, events: GameEvent[]): void {
   for (const p of alive) if (!p.eliminated) addPoints(p, CONFIG.points.round, 'round', events);
 }
 
-function addPoints(p: Player, amount: number, reason: 'round' | 'win' | 'kick', events: GameEvent[]): void {
+function addPoints(p: Player, amount: number, reason: 'round' | 'win' | 'kick' | 'penalty', events: GameEvent[]): void {
   p.score += amount;
   events.push({ type: 'points', playerId: p.id, amount, reason });
 }
@@ -309,6 +378,9 @@ function handleAction(s: GameState, p: Player, input: PlayerInput, events: GameE
   const victim = seatKickTarget(s, p);
   if (victim) return kickOffSeat(s, p, victim, events);
   const target = pushTarget(s, p);
+  // Kicking a seated passenger: only when nobody standing is closer to push.
+  const npcSeat = npcKickSeat(s, p);
+  if (npcSeat && (!target || dist(p.pos, seatFront(npcSeat)) < dist(p.pos, target.pos))) return kickNpc(s, p, npcSeat, events);
   if (!target) return;
   const dx = target.pos.x - p.pos.x;
   const dz = target.pos.z - p.pos.z;
@@ -324,6 +396,54 @@ function handleAction(s: GameState, p: Player, input: PlayerInput, events: GameE
   target.vel.z += (dz / len) * PUSH.impulse;
   target.stunnedUntil = s.time + PUSH.stun;
   events.push({ type: 'pushed', by: p.id, target: target.id });
+}
+
+
+/** A seated passenger (not on a priority seat) right in front of us, during the scramble. */
+export function npcKickSeat(s: GameState, p: Player): Seat | undefined {
+  if (s.phase !== 'scramble' || p.seatId !== null || p.eliminated) return undefined;
+  let best: Seat | undefined;
+  let bestD: number = CONFIG.challenge.npcKickRange;
+  for (const seat of s.seats) {
+    if (!seat.npc || seat.priority || seat.playerId !== null) continue;
+    const d = dist(p.pos, seatFront(seat));
+    if (d <= bestD) {
+      best = seat;
+      bestD = d;
+    }
+  }
+  return best;
+}
+
+/**
+ * Kicking a passenger off their seat works, but the staff notice: the first
+ * time costs points, the second time an officer takes you off the train
+ * (out for the rest of this game).
+ */
+function kickNpc(s: GameState, p: Player, seat: Seat, events: GameEvent[]): void {
+  p.pushReadyAt = s.time + CONFIG.challenge.kickCooldown;
+  p.npcStrikes++;
+  events.push({ type: 'npcKick', playerId: p.id, seatId: seat.id, strike: p.npcStrikes });
+  if (p.npcStrikes >= 2) {
+    // Taken away by an officer; the passenger keeps the seat.
+    p.eliminated = true;
+    p.eliminatedInRound = s.round;
+    p.kickAt = null;
+    events.push({ type: 'escorted', playerId: p.id, seatId: seat.id });
+    return;
+  }
+  seat.npc = false;
+  const lost = Math.min(p.score, CONFIG.challenge.npcKickPenalty);
+  p.score -= lost;
+  if (lost > 0) events.push({ type: 'points', playerId: p.id, amount: -lost, reason: 'penalty' });
+  // You do get the seat.
+  seat.playerId = p.id;
+  p.seatId = seat.id;
+  p.pos = seatSitPos(seat);
+  p.vel = { x: 0, z: 0 };
+  p.facing = seat.side > 0 ? Math.PI : 0;
+  p.kickAt = null;
+  events.push({ type: 'sat', playerId: p.id, seatId: seat.id });
 }
 
 /** True when a seated player is closer in front of us than the free seat we could take. */

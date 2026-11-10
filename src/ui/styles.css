@@ -296,6 +296,24 @@ button {
   background: var(--sit);
 }
 
+/* Rush hour: red and blinking, so it reads as a special event. */
+#board.rush {
+  border-bottom-color: #e5484d;
+}
+
+#board.rush #boardChallenge {
+  color: #fff;
+  background: #e5484d;
+  border-radius: 6px;
+  padding: 1px 8px;
+  animation: rushBlink 0.9s ease-in-out infinite alternate;
+}
+
+@keyframes rushBlink {
+  from { opacity: 1; }
+  to { opacity: 0.65; }
+}
+
 #topRight {
   position: absolute;
   top: calc(10px + var(--safe-t));

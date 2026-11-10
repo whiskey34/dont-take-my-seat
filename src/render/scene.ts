@@ -4,7 +4,7 @@ import { CONFIG } from '../core/config';
 import { BENCH_SEGMENTS, createSeats, POLES, seatSitPos } from '../core/layout';
 import { trainAccel } from '../core/game';
 import type { GameEvent, GameState, PowerUpKind, Seat } from '../core/types';
-import { createFigure, setHair, setSeated, setStride, type Figure } from './figure';
+import { createFigure, createOfficer, setHair, setSeated, setStride, type Figure } from './figure';
 import { PLAYER_COLORS, SCENE } from './palette';
 
 const { car } = CONFIG;
@@ -31,6 +31,29 @@ interface PlayerView {
   stars: THREE.Group; // dizzy stars over the head after being kicked
   dazed: boolean;
 }
+
+/**
+ * The officer's visits. 'warn': steps in at the nearest door, blows the
+ * whistle at the player and leaves. 'escort': walks to the player, takes
+ * them by the arm and walks them out of the door.
+ */
+interface OfficerVisit {
+  mode: 'warn' | 'escort';
+  playerId: string;
+  at: number; // render clock
+  door: THREE.Vector3;
+  /** Where the officer stops (beside the player). */
+  meet: THREE.Vector3;
+  /** Player position when the escort started. */
+  from: THREE.Vector3;
+}
+
+/** Officer timings (seconds, render clock). */
+const OFFICER_WARN = 2.6;
+const ESCORT_WALK_IN = 1.1;
+const ESCORT_GRAB = 0.45;
+const ESCORT_WALK_OUT = 1.6;
+const ESCORT_TOTAL = ESCORT_WALK_IN + ESCORT_GRAB + ESCORT_WALK_OUT;
 
 /** A small five-pointed star for the dizzy effect. */
 const starGeo = (() => {
@@ -80,6 +103,8 @@ export class TrainScene {
   private trainSpeed = 0;
   private doorOpen = 0;
   private clock = 0;
+  private officer: Figure | null = null;
+  private visit: OfficerVisit | null = null;
 
   constructor(canvas: HTMLCanvasElement) {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
@@ -358,6 +383,8 @@ export class TrainScene {
         if (who) this.pulse(who.pos.x, who.pos.z, SCENE.puddle);
       }
       if (e.type === 'seatKick') this.seatKick(state, e.by, e.target, e.seatId);
+      if (e.type === 'npcKick') this.npcKicked(state, e.playerId, e.seatId, e.strike);
+      if (e.type === 'escorted') this.startVisit(state, 'escort', e.playerId);
       if (e.type === 'sat') {
         const p = state.players.find((q) => q.id === e.playerId);
         if (p) this.pulse(p.pos.x, p.pos.z, SCENE.freeMarker);
@@ -417,6 +444,148 @@ export class TrainScene {
     this.burst(at);
     this.pulse(sit.x, sit.z - seat.side * 0.4, SCENE.kick);
     this.shake = Math.max(this.shake, 0.3);
+  }
+
+  /** A player kicks a seated passenger: kick pose, red flash, the passenger gets up and leaves. */
+  private npcKicked(state: GameState, playerId: string, seatId: number, strike: number): void {
+    const seat = state.seats[seatId];
+    const kicker = this.players.get(playerId);
+    if (!seat) return;
+    const sit = seatSitPos(seat);
+    const at = new THREE.Vector3(sit.x, 0.7, sit.z - seat.side * 0.3);
+    if (kicker) {
+      const dir = at.clone().sub(kicker.fig.root.position).setY(0);
+      kicker.kick = { at: this.clock, dir: dir.lengthSq() > 0 ? dir.normalize() : new THREE.Vector3(0, 0, seat.side) };
+    }
+    this.burst(at);
+    this.shake = Math.max(this.shake, 0.25);
+    // First time the passenger gives up the seat; the second time the officer steps in first.
+    if (strike < 2) {
+      this.npcLeaves(seat);
+      this.startVisit(state, 'warn', playerId);
+    }
+  }
+
+  private startVisit(state: GameState, mode: OfficerVisit['mode'], playerId: string): void {
+    const p = state.players.find((q) => q.id === playerId);
+    const v = this.players.get(playerId);
+    if (!p || !v) return;
+    if (!this.officer) {
+      this.officer = createOfficer();
+      this.officer.root.scale.setScalar(1.22);
+      this.scene.add(this.officer.root);
+    }
+    const pos = v.fig.root.position.clone().setY(0);
+    const doorX = car.doorsX.reduce((best, d) => (Math.abs(d - pos.x) < Math.abs(best - pos.x) ? d : best), car.doorsX[0]);
+    const door = new THREE.Vector3(doorX, 0, -WALL_Z - 0.1);
+    // Stop just beside the player, on the door's side.
+    // Side by side with the player (on the door's side), so both read from the camera.
+    const toward = Math.sign(doorX - pos.x) || 1;
+    const meet = mode === 'escort' ? pos.clone().add(new THREE.Vector3(toward * 0.5, 0, 0.05)) : new THREE.Vector3(doorX, 0, -WALL_Z + 1.0);
+    meet.z = Math.max(meet.z, -car.aisleHalfWidth);
+    this.visit = { mode, playerId, at: this.clock, door, meet, from: pos };
+  }
+
+  /** Moves the officer (and an escorted player) for the current visit. */
+  private updateOfficer(): void {
+    const o = this.officer;
+    const vis = this.visit;
+    if (!o) return;
+    if (!vis) {
+      o.root.visible = false;
+      return;
+    }
+    const t = this.clock - vis.at;
+    const r = o.root;
+    r.visible = true;
+    setSeated(o, false);
+    const walkTo = (a: THREE.Vector3, b: THREE.Vector3, u: number) => {
+      r.position.lerpVectors(a, b, Math.min(1, u));
+      if (a.distanceToSquared(b) > 1e-4) r.rotation.y = Math.atan2(b.x - a.x, b.z - a.z);
+      setStride(o, this.clock * 11, u < 1 ? 1 : 0);
+    };
+    const face = (target: THREE.Vector3) => (r.rotation.y = Math.atan2(target.x - r.position.x, target.z - r.position.z));
+    const fade = (u: number) => r.scale.setScalar(1.22 * (u > 0.75 ? Math.max(0.01, 1 - (u - 0.75) / 0.25) : 1));
+    if (vis.mode === 'warn') {
+      const v = this.players.get(vis.playerId);
+      const u = t / OFFICER_WARN;
+      if (u >= 1) {
+        this.visit = null;
+        r.visible = false;
+        return;
+      }
+      r.scale.setScalar(1.22);
+      if (t < 0.5) walkTo(vis.door, vis.meet, t / 0.5);
+      else if (t < OFFICER_WARN - 0.6) {
+        setStride(o, 0, 0);
+        if (v) face(v.fig.root.position);
+        // Whistle to the mouth, other arm points at the player.
+        o.arms[0].rotation.x = -2.3;
+        o.arms[1].rotation.x = -1.3 - 0.15 * Math.sin(this.clock * 14);
+        r.position.y = Math.abs(Math.sin(this.clock * 9)) * 0.02;
+      } else {
+        o.arms[0].rotation.x = o.arms[1].rotation.x = 0;
+        walkTo(vis.meet, vis.door, (t - (OFFICER_WARN - 0.6)) / 0.6);
+        fade((t - (OFFICER_WARN - 0.6)) / 0.6);
+      }
+      return;
+    }
+    // Escort.
+    if (t >= ESCORT_TOTAL) {
+      this.visit = null;
+      r.visible = false;
+      const pv = this.players.get(vis.playerId);
+      if (pv) pv.visible = 0; // gone through the door; no fade-out back at the old spot
+      return;
+    }
+    r.scale.setScalar(1.22);
+    if (t < ESCORT_WALK_IN) walkTo(vis.door, vis.meet, t / ESCORT_WALK_IN);
+    else if (t < ESCORT_WALK_IN + ESCORT_GRAB) {
+      setStride(o, 0, 0);
+      face(vis.from);
+      o.arms[1].rotation.x = -1.2; // reaches for the player's arm
+      o.arms[0].rotation.x = -2.3; // whistle
+    } else {
+      const u = (t - ESCORT_WALK_IN - ESCORT_GRAB) / ESCORT_WALK_OUT;
+      walkTo(vis.meet, vis.door, u);
+      o.arms[0].rotation.x = 0;
+      o.arms[1].rotation.x = -0.9; // holding on
+      fade(u);
+    }
+  }
+
+  /** During an escort the out player stays visible and walks out beside the officer. */
+  private escortPose(v: PlayerView, playerId: string): boolean {
+    const vis = this.visit;
+    if (!vis || vis.mode !== 'escort' || vis.playerId !== playerId || !this.officer) return false;
+    const t = this.clock - vis.at;
+    const r = v.fig.root;
+    r.visible = true;
+    v.visible = 1;
+    setSeated(v.fig, false);
+    if (t < ESCORT_WALK_IN + ESCORT_GRAB) {
+      r.position.copy(vis.from);
+      r.scale.setScalar(1.18);
+      setStride(v.fig, 0, 0);
+      // Turns to the officer, head down.
+      r.rotation.y = Math.atan2(vis.meet.x - vis.from.x, vis.meet.z - vis.from.z);
+      r.rotation.x = 0.12;
+      v.fig.arms[0].rotation.x = v.fig.arms[1].rotation.x = 0.3;
+      return true;
+    }
+    const u = Math.min(1, (t - ESCORT_WALK_IN - ESCORT_GRAB) / ESCORT_WALK_OUT);
+    const o = this.officer.root;
+    // Walks half a step behind and beside the officer.
+    const side = new THREE.Vector3(Math.cos(o.rotation.y), 0, -Math.sin(o.rotation.y)).multiplyScalar(0.42);
+    const back = new THREE.Vector3(Math.sin(o.rotation.y), 0, Math.cos(o.rotation.y)).multiplyScalar(-0.2);
+    r.position.copy(o.position).add(side).add(back).setY(0);
+    r.rotation.y = o.rotation.y;
+    r.rotation.x = 0.12;
+    r.rotation.z = 0;
+    setStride(v.fig, this.clock * 11 + 1, 1);
+    v.fig.arms[0].rotation.x = -0.6; // held arm
+    r.scale.setScalar(1.18 * (u > 0.75 ? Math.max(0.01, 1 - (u - 0.75) / 0.25) : 1));
+    return true;
   }
 
   /** A soft red glow that pops and fades behind the hit. */
@@ -486,6 +655,12 @@ export class TrainScene {
     for (const p of state.players) {
       const v = this.players.get(p.id);
       if (!v) continue;
+      if (this.escortPose(v, p.id)) {
+        if (v.ring) v.ring.visible = false;
+        v.shield.visible = false;
+        v.stars.visible = false;
+        continue;
+      }
       const r = v.fig.root;
       v.visible += ((p.eliminated ? 0 : 1) - v.visible) * Math.min(1, dt * 4);
       r.visible = v.visible > 0.02;
@@ -507,6 +682,7 @@ export class TrainScene {
       if (v.shield.visible) v.shield.rotation.z += dt * 3;
     }
 
+    this.updateOfficer();
     this.updateBursts(dt);
     this.syncStanders(state, dt);
     this.syncItems(state);
@@ -523,7 +699,12 @@ export class TrainScene {
         marker.rotation.y += dt * 2;
       }
       const mat = this.cushions[id]?.material as THREE.MeshLambertMaterial | undefined;
-      mat?.emissive.set(free ? SCENE.freeMarker : '#000000').multiplyScalar(free ? 0.35 + 0.25 * Math.sin(this.clock * 8) : 0);
+      // Priority seats can move during a stop: blink red before they turn.
+      const m = state.seatMove;
+      const warning = !!m && !m.done && scramble && m.seatIds.includes(id) && state.time >= m.at - CONFIG.challenge.seatMoveWarn;
+      const red = warning ? Math.sin(this.clock * 22) > 0 : seat.priority;
+      mat?.color.set(red ? SCENE.prioritySeat : SCENE.seat);
+      mat?.emissive.set(free && !warning ? SCENE.freeMarker : '#000000').multiplyScalar(free && !warning ? 0.35 + 0.25 * Math.sin(this.clock * 8) : 0);
       const npc = this.npcs[id];
       if (npc && !this.npcAnims.some((a) => a.fig === npc)) {
         // Match the state even if we missed the events (e.g. joined mid-game):

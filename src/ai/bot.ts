@@ -1,5 +1,5 @@
 import { CONFIG } from '../core/config';
-import { dist, findSeat, pushTarget, seatInReach, seatKickTarget } from '../core/game';
+import { dist, findSeat, npcKickSeat, pushTarget, seatInReach, seatKickTarget } from '../core/game';
 import { seatFront } from '../core/layout';
 import type { GameState, Player, PlayerInput, Seat, Vec2 } from '../core/types';
 import { NO_INPUT } from '../core/types';
@@ -17,6 +17,8 @@ export interface BotBrain {
   wanderUntil: number;
   wantsTrap: boolean | null;
   wantsPowerUp: boolean | null;
+  /** This stop, with no seat left: kick a passenger off theirs (bots only risk it once). */
+  wantsNpcKick: boolean | null;
 }
 
 export function createBrain(seed: number, level: 'easy' | 'normal' = 'normal'): BotBrain {
@@ -34,6 +36,7 @@ export function createBrain(seed: number, level: 'easy' | 'normal' = 'normal'): 
     wanderUntil: 0,
     wantsTrap: null,
     wantsPowerUp: null,
+    wantsNpcKick: null,
   };
 }
 
@@ -54,6 +57,7 @@ export function botThink(s: GameState, me: Player, b: BotBrain, dt: number): Pla
     b.scrambleSeenAt = null;
     b.targetSeatId = null;
     b.wantsTrap = null;
+    b.wantsNpcKick = null;
     if (b.wantsPowerUp === null) b.wantsPowerUp = rand(b) < 0.55;
     const item = s.powerUps[0];
     if (b.wantsPowerUp && item && dist(me.pos, item.pos) < 6) return steer(s, me, item.pos, b.speed * 0.8, maybePush(s, me, b, dt, 0.25));
@@ -78,6 +82,13 @@ export function botThink(s: GameState, me: Player, b: BotBrain, dt: number): Pla
       const victim = nearestSeated(s, me);
       if (victim) return steer(s, me, seatFront(victim), b.speed, maybePush(s, me, b, dt, 0.5));
     }
+    // Desperate: kick a seated passenger (never a second time, that gets you taken off the train).
+    if (b.wantsNpcKick === null) b.wantsNpcKick = me.npcStrikes === 0 && rand(b) < 0.3;
+    if (b.wantsNpcKick && me.npcStrikes === 0) {
+      if (npcKickSeat(s, me)) return { moveX: 0, moveZ: 0, action: s.time >= me.pushReadyAt };
+      const seat = nearestNpcSeat(s, me);
+      if (seat) return steer(s, me, seatFront(seat), b.speed, false);
+    }
     return { ...NO_INPUT, action: maybePush(s, me, b, dt, 1) };
   }
 
@@ -94,7 +105,7 @@ export function botThink(s: GameState, me: Player, b: BotBrain, dt: number): Pla
 
 function chooseSeat(s: GameState, me: Player, b: BotBrain): Seat | undefined {
   const current = b.targetSeatId === null ? undefined : s.seats[b.targetSeatId];
-  if (current && !current.npc && current.playerId === null) return current;
+  if (current && !current.npc && current.playerId === null && (!current.priority || b.wantsTrap)) return current;
 
   const open = s.seats.filter((seat) => !seat.npc && seat.playerId === null);
   if (open.length === 0) return undefined;
@@ -118,6 +129,20 @@ function chooseSeat(s: GameState, me: Player, b: BotBrain): Seat | undefined {
     }
   }
   b.targetSeatId = best?.id ?? null;
+  return best;
+}
+
+function nearestNpcSeat(s: GameState, me: Player): Seat | undefined {
+  let best: Seat | undefined;
+  let bestD = Infinity;
+  for (const seat of s.seats) {
+    if (!seat.npc || seat.priority || seat.playerId !== null) continue;
+    const d = dist(me.pos, seatFront(seat));
+    if (d < bestD) {
+      best = seat;
+      bestD = d;
+    }
+  }
   return best;
 }
 
