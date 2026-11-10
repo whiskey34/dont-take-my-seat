@@ -36,6 +36,12 @@ RtcHost/JoinTransport          MessengerTransport
   - Pemain lain digambar **120 ms di belakang** dan di-interpolasi di antara snapshot, sehingga tetap halus meskipun ada paket yang hilang.
 - Snapshot dikirim 20 kali per detik lewat channel `fast` (boleh hilang); event dan aksi lewat `reliable`.
 
+**Penyebab pemain "tersangkut" yang sudah ditangani:**
+- *Host di latar belakang* (layar redup, pindah ke WhatsApp): browser menghentikan `requestAnimationFrame`, sehingga game di host berhenti dan semua pemain lain membeku. Sekarang timer di Web Worker tetap menjalankan game host (±30 kali per detik) selama halaman tersembunyi.
+- *Joystick macet*: kalau browser (terutama iOS) kehilangan event "jari diangkat", sentuhan baru dulu diabaikan. Sekarang sentuhan baru selalu mengambil alih stik, dan jari yang sedang dipakai di-*capture* (`setPointerCapture`).
+- *Lantai becek*: dari posisi diam, pemain tetap bisa mulai berjalan (licin hanya untuk berhenti dan berbelok).
+- *Latensi tinggi*: riwayat input yang diputar ulang diperpanjang menjadi 4 detik, dan pemain melihat tanda *Sinyal lemah…* kalau snapshot dari host berhenti lebih dari 0,6 detik.
+
 ## Kode room (tanpa server sendiri)
 
 1. Host membuat kode 5 karakter. Topik dan kunci AES-GCM diturunkan dari kode itu, sehingga relay tidak bisa membaca isinya.

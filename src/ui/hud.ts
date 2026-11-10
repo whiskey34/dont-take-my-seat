@@ -37,6 +37,7 @@ export class Hud {
   /** Connection notice above everything (e.g. rejoining after the signal dropped); '' hides it. */
   notice(text: string): void {
     const el = $('netNotice');
+    if (el.textContent === text && el.hidden === !text) return;
     el.textContent = text;
     el.hidden = !text;
   }

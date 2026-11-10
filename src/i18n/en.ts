@@ -117,6 +117,7 @@ export const en = {
   continueNow: 'Continue',
   nextGameSoon: 'The next game starts in a moment…',
   reconnecting: 'Weak signal, reconnecting…',
+  weakSignal: 'Weak signal…',
   gameNumber: 'Game {n}',
 };
 

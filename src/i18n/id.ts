@@ -119,5 +119,6 @@ export const id: Strings = {
   continueNow: 'Lanjut',
   nextGameSoon: 'Game berikutnya segera dimulai…',
   reconnecting: 'Sinyal terganggu, menyambung ulang…',
+  weakSignal: 'Sinyal lemah…',
   gameNumber: 'Game {n}',
 };

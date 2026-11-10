@@ -10,7 +10,7 @@ const INTERP_DELAY = 0.12;
 /** Movement input goes out about every frame (60 Hz) so the host can acknowledge it precisely. */
 const INPUT_INTERVAL = 1 / 75;
 /** Longest stretch of unacknowledged input we replay (seconds of frames). */
-const MAX_HISTORY = 90;
+const MAX_HISTORY = 240;
 
 /**
  * `lost`: the link to the host dropped or went silent (bad signal), but the
@@ -189,6 +189,12 @@ export class ClientSession implements GameSession {
   /** True once the host's state has arrived (before that the view is only the opening layout). */
   get hasSnapshot(): boolean {
     return this.snaps.length > 0;
+  }
+
+  /** Nothing from the host for a moment: the game on screen is not moving on (weak signal). */
+  get stalled(): boolean {
+    const latest = this.snaps[this.snaps.length - 1];
+    return !!latest && this.state.phase !== 'gameOver' && this.clock - latest.at > 0.6;
   }
 
   receiveSnapshot(snap: Snapshot): void {

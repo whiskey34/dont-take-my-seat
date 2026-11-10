@@ -375,8 +375,14 @@ export function move(s: GameState, p: Player, input: PlayerInput, dt: number): v
     mx = 0;
     mz = 0;
   }
-  // Wet floor: hard to change direction, you keep sliding.
-  const grip = s.puddles.length > 0 && onPuddle(s, p.pos) ? CONFIG.challenge.puddleGrip : P.responsiveness;
+  // Wet floor: hard to stop or change direction, you keep sliding. Getting
+  // going in the direction you already move is only a little slower, so a
+  // puddle never leaves you stuck.
+  let grip: number = P.responsiveness;
+  if (s.puddles.length > 0 && onPuddle(s, p.pos)) {
+    const speedUp = mx * p.vel.x + mz * p.vel.z >= 0 && Math.hypot(p.vel.x, p.vel.z) < Math.hypot(mx, mz) * P.speed;
+    grip = speedUp ? P.responsiveness * 0.5 : CONFIG.challenge.puddleGrip;
+  }
   const k = 1 - Math.exp(-grip * dt);
   p.vel.x += (mx * P.speed - p.vel.x) * k;
   p.vel.z += (mz * P.speed - p.vel.z) * k;

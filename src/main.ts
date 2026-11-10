@@ -86,6 +86,7 @@ class App {
     });
     this.startDemo();
     requestAnimationFrame(this.frame);
+    this.startBackgroundTicker();
     // Updates reload the page, so only apply them while sitting in the main menu.
     initPwa({ isSafeToReload: () => this.mode === 'menu' && !this.net, onInstallChange: () => this.syncInstall() });
     this.syncInstall();
@@ -167,6 +168,29 @@ class App {
     this.last = performance.now();
   }
 
+  /**
+   * The host runs the game for everyone. Browsers stop animation frames in the
+   * background (screen dimmed, switched to WhatsApp), which froze every other
+   * player in place. A worker timer keeps the host's game ticking meanwhile.
+   */
+  private startBackgroundTicker(): void {
+    try {
+      const url = URL.createObjectURL(new Blob(['setInterval(() => postMessage(0), 33);'], { type: 'text/javascript' }));
+      new Worker(url).onmessage = () => this.backgroundTick();
+    } catch {
+      /* no workers: the game pauses in the background as before */
+    }
+  }
+
+  private backgroundTick(): void {
+    if (!document.hidden || this.session.kind !== 'host') return;
+    const now = performance.now();
+    const dt = Math.min(0.1, (now - this.last) / 1000);
+    this.last = now;
+    const events = this.session.update(dt, NO_INPUT);
+    if (events.length) this.onEvents(this.session.view(), events);
+  }
+
   private frame = (now: number) => {
     const dt = Math.min(0.1, (now - this.last) / 1000);
     this.last = now;
@@ -186,6 +210,8 @@ class App {
       this.hud.show(true);
     }
     if (events.length) this.onEvents(view, events);
+    // Tell the player why things stopped moving, instead of feeling stuck.
+    if (!this.reconnecting && this.session instanceof ClientSession && this.mode === 'playing') this.hud.notice(this.session.stalled ? t('weakSignal') : '');
     this.scene.render(view, running ? dt : 0);
     if (this.mode === 'playing' || this.mode === 'paused' || this.mode === 'over') this.hud.update(view, this.scene, this.width, this.height, this.session.offline?.());
     requestAnimationFrame(this.frame);

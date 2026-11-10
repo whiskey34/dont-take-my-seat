@@ -24,6 +24,7 @@ export class Controls {
     window.addEventListener('pointermove', this.onMove);
     window.addEventListener('pointerup', this.onUp);
     window.addEventListener('pointercancel', this.onUp);
+    zone.addEventListener('lostpointercapture', this.onUp);
     actionButton.addEventListener('pointerdown', (e) => {
       e.preventDefault();
       this.actionQueued = true;
@@ -79,9 +80,16 @@ export class Controls {
   }
 
   private onDown = (e: PointerEvent) => {
-    if (this.stickPointer !== null) return;
+    // A new touch always takes the stick. If the browser lost the old finger's
+    // "up" event (iOS does this), the stick would otherwise stay stuck.
     e.preventDefault();
     this.stickPointer = e.pointerId;
+    try {
+      // Keep receiving this finger's moves and release even outside the zone.
+      this.zone.setPointerCapture(e.pointerId);
+    } catch {
+      /* not supported */
+    }
     this.origin = { x: e.clientX, y: e.clientY };
     const rect = this.zone.getBoundingClientRect();
     this.base.style.left = `${e.clientX - rect.left}px`;

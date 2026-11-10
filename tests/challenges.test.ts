@@ -150,6 +150,17 @@ describe('kick fight and wet floor', () => {
     expect(run(false)).toBeLessThan(0); // dry: already turned around
     expect(run(true)).toBeGreaterThan(2.5); // wet: still sliding the old way
   });
+
+  it('a puddle never leaves you stuck: from standing still you get going', () => {
+    const s = gameWith('puddles');
+    s.phaseEndsAt = Infinity;
+    const d = s.puddles[0]!;
+    const a = s.players[0]!;
+    a.pos = { x: d.x, z: d.z };
+    a.vel = { x: 0, z: 0 };
+    for (let i = 0; i < 18; i++) step(s, new Map([['a', { moveX: 1, moveZ: 0, action: false }]]), DT);
+    expect(a.vel.x).toBeGreaterThan(CONFIG.player.speed * 0.8);
+  });
 });
 
 describe('points', () => {
