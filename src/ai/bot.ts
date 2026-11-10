@@ -59,7 +59,8 @@ export function botThink(s: GameState, me: Player, b: BotBrain, dt: number): Pla
     b.wantsTrap = null;
     b.wantsNpcKick = null;
     if (b.wantsPowerUp === null) b.wantsPowerUp = rand(b) < 0.55;
-    const item = s.powerUps[0];
+    // Bots know the MBG tray is spoiled; they go for the nearest good item.
+    const item = s.powerUps.filter((u) => u.kind !== 'mbg').sort((a, b) => dist(me.pos, a.pos) - dist(me.pos, b.pos))[0];
     if (b.wantsPowerUp && item && dist(me.pos, item.pos) < 6) return steer(s, me, item.pos, b.speed * 0.8, maybePush(s, me, b, dt, 0.25));
     if (s.time >= b.wanderUntil) {
       b.wander = { x: me.pos.x + (rand(b) - 0.5) * 3, z: (rand(b) - 0.5) * 1.6 };

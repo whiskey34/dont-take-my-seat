@@ -12,7 +12,7 @@ import { CHALLENGE_KINDS, POWER_UP_KINDS, type GameEvent, type GameState, type P
  * - puddles: wet patches on the floor; you slide when you run through them.
  * - rushHour (special event, at most twice a game, never at the first or last
  *   stop): the aisle is packed with standing passengers; you squeeze through slowly.
- * One power-up lies on the floor every stop.
+ * One to three power-ups lie on the floor every stop (the MBG tray is a bad one).
  */
 const C = CONFIG.challenge;
 const PU = CONFIG.powerUp;
@@ -61,7 +61,8 @@ export function startChallenge(s: GameState, events: GameEvent[]): void {
       s.puddles.push({ x, z: between(s, -0.7, 0.7), r: between(s, C.puddleRadius[0], C.puddleRadius[1]) });
     }
   }
-  spawnPowerUp(s);
+  const count = PU.perStop[0] + Math.floor(rand(s) * (PU.perStop[1] - PU.perStop[0] + 1));
+  for (let i = 0; i < count; i++) spawnPowerUp(s);
   events.push({ type: 'challenge', kind });
 }
 
@@ -104,6 +105,11 @@ export function collectPowerUps(s: GameState, events: GameEvent[]): void {
     if (!u) continue;
     if (u.kind === 'earphones') p.shieldUntil = s.time + PU.shieldTime;
     else if (u.kind === 'coffee') p.boostUntil = s.time + PU.boostTime;
+    else if (u.kind === 'mbg') {
+      // Food poisoning: green and slow. It also spoils a coffee boost.
+      p.sickUntil = s.time + PU.sickTime;
+      p.boostUntil = 0;
+    }
     else p.sleeping = true;
     events.push({ type: 'powerUp', playerId: p.id, kind: u.kind });
   }
@@ -181,7 +187,8 @@ function spawnPowerUp(s: GameState): void {
     pos = { x: between(s, -9.5, 9.5), z: between(s, -0.9, 0.9) };
     const nearPole = POLES.some((pl) => Math.hypot(pl.x - pos.x, pl.z - pos.z) < 0.7);
     const nearPlayer = s.players.some((p) => !p.eliminated && Math.hypot(p.pos.x - pos.x, p.pos.z - pos.z) < 2);
-    if (!nearPole && !nearPlayer) break;
+    const nearItem = s.powerUps.some((u) => Math.hypot(u.pos.x - pos.x, u.pos.z - pos.z) < 2.5);
+    if (!nearPole && !nearPlayer && !nearItem) break;
   }
   s.powerUps.push({ id: s.nextId++, kind, pos });
 }

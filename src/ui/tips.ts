@@ -11,6 +11,7 @@ import type { TrainScene } from '../render/scene';
  */
 export type TipId =
   | 'coffee'
+  | 'mbg'
   | 'earphones'
   | 'sleep'
   | 'suddenBrake'
@@ -28,6 +29,7 @@ export type TipId =
 
 export const TIP_IDS: readonly TipId[] = [
   'coffee',
+  'mbg',
   'earphones',
   'sleep',
   'suddenBrake',
@@ -53,6 +55,7 @@ interface Tip {
 
 const KIND: Record<TipId, 'item' | 'challenge' | 'rule'> = {
   coffee: 'item',
+  mbg: 'item',
   earphones: 'item',
   sleep: 'item',
   suddenBrake: 'challenge',
@@ -74,6 +77,7 @@ const COFFEE_ICON =
 
 const ICON: Record<TipId, string> = {
   coffee: COFFEE_ICON,
+  mbg: '🍱',
   earphones: '🎧',
   sleep: '💤',
   suddenBrake: '⚠️',

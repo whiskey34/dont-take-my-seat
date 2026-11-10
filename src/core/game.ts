@@ -36,6 +36,7 @@ export function createGame(setups: readonly PlayerSetup[], seed: number): GameSt
     boostUntil: 0,
     slipUntil: 0,
     npcStrikes: 0,
+    sickUntil: 0,
     score: Math.max(0, Math.floor(s.score ?? 0)),
   }));
   const [route, rngAfterRoute] = pickRoute(seed | 0);
@@ -201,6 +202,7 @@ function startRound(s: GameState, events: GameEvent[]): void {
     p.shieldUntil = 0;
     p.boostUntil = 0;
     p.slipUntil = 0;
+    p.sickUntil = 0;
   }
   placeStandingPlayers(s);
   startChallenge(s, events);
@@ -557,7 +559,9 @@ export function move(s: GameState, p: Player, input: PlayerInput, dt: number): b
   // Sliding after a slip keeps going a long way; otherwise normal grip.
   const grip: number = s.time < p.slipUntil ? CONFIG.challenge.slipGrip : P.responsiveness;
   const k = 1 - Math.exp(-grip * dt);
-  const speed = s.time < p.boostUntil ? P.speed * CONFIG.powerUp.boostSpeed : P.speed;
+  const boost = s.time < p.boostUntil ? CONFIG.powerUp.boostSpeed : 1;
+  const sick = s.time < p.sickUntil ? CONFIG.powerUp.sickSpeed : 1;
+  const speed = P.speed * boost * sick;
   p.vel.x += (mx * speed - p.vel.x) * k;
   p.vel.z += (mz * speed - p.vel.z) * k;
   const a = trainAccel(s);

@@ -331,7 +331,8 @@ class App {
       if (e.type === 'npcKick' && e.playerId === me) this.buzz([60, 40, 60]);
       if (e.type === 'escorted' && e.playerId === me) play('out');
       if (e.type === 'seatMoveWarn') play('tick');
-      if (e.type === 'powerUp' && e.playerId === me) play('pickup');
+      if (e.type === 'powerUp' && e.playerId === me) play(e.kind === 'mbg' ? 'out' : 'pickup');
+      if (e.type === 'powerUp' && e.playerId === me && e.kind === 'mbg') this.buzz([30, 30, 30]);
       if (e.type === 'shielded' && e.playerId === me) play('block');
       if (e.type === 'slept' && e.playerId === me) play('pickup');
       if (e.type === 'eliminated' && e.playerIds.includes(me)) play('out');

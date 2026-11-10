@@ -1,7 +1,7 @@
 import { ALL_CHALLENGES, POWER_UP_KINDS, type ChallengeKind, type GameEvent, type GameState, type Phase, type Player, type PlayerSetup, type PowerUpKind, type Seat } from '../core/types';
 
 /** Bump when messages change incompatibly; peers with another version are refused. */
-export const PROTOCOL_VERSION = 8;
+export const PROTOCOL_VERSION = 9;
 export const MAX_NAME = 14;
 
 export interface LobbyPlayer {
@@ -41,8 +41,8 @@ export interface Snapshot {
   free: number[];
   trap: number;
   winner: string;
-  /** [id, x, z, vx, vz, facing, seat, eliminated, elimRound, stunnedUntil, pushReadyAt, kickAt, shieldUntil, sleeping, score, boostUntil, slipUntil, npcStrikes] */
-  p: Array<[string, number, number, number, number, number, number, 0 | 1, number, number, number, number, number, 0 | 1, number, number, number, number]>;
+  /** [id, x, z, vx, vz, facing, seat, eliminated, elimRound, stunnedUntil, pushReadyAt, kickAt, shieldUntil, sleeping, score, boostUntil, slipUntil, npcStrikes, sickUntil] */
+  p: Array<[string, number, number, number, number, number, number, 0 | 1, number, number, number, number, number, 0 | 1, number, number, number, number, number]>;
   /** Puddles [x, z, r] (wet floor challenge). */
   pd: Array<[number, number, number]>;
   /** Challenge of this stop ('' none), sudden-brake end time, open door side. */
@@ -99,6 +99,7 @@ export function packSnapshot(s: GameState, offline: Iterable<string> = [], acks:
       r3(p.boostUntil),
       r3(p.slipUntil),
       p.npcStrikes,
+      r3(p.sickUntil),
     ]),
     pd: s.puddles.map((d) => [r3(d.x), r3(d.z), r3(d.r)]),
     ch: s.challenge ?? '',
@@ -164,6 +165,7 @@ export function applyPlayerRow(p: Player, row: Snapshot['p'][number]): void {
   p.boostUntil = row[15];
   p.slipUntil = row[16];
   p.npcStrikes = row[17];
+  p.sickUntil = row[18];
 }
 
 // --------------------------------------------------------------- validation
@@ -255,10 +257,10 @@ function isSnapshot(v: unknown): v is Snapshot {
   if (!Array.isArray(v.free) || !v.free.every(isInt) || !isInt(v.trap) || !isStr(v.winner)) return false;
   if (typeof v.npc !== 'string' || v.npc.length > 200 || !Array.isArray(v.occ) || !Array.isArray(v.p) || v.p.length > 4) return false;
   if (!v.occ.every((o) => Array.isArray(o) && o.length === 2 && isInt(o[0]) && isStr(o[1]))) return false;
-  if (!v.p.every((row) => Array.isArray(row) && row.length === 18 && isStr(row[0]) && row.slice(1).every(isNum))) return false;
+  if (!v.p.every((row) => Array.isArray(row) && row.length === 19 && isStr(row[0]) && row.slice(1).every(isNum))) return false;
   if (v.ch !== '' && !ALL_CHALLENGES.includes(v.ch as ChallengeKind)) return false;
   if (!isNum(v.bk) || (v.ds !== -1 && v.ds !== 0 && v.ds !== 1)) return false;
-  if (!Array.isArray(v.st) || v.st.length > 20 || !v.st.every((r) => Array.isArray(r) && r.length === 3 && r.every(isNum))) return false;
+  if (!Array.isArray(v.st) || v.st.length > 30 || !v.st.every((r) => Array.isArray(r) && r.length === 3 && r.every(isNum))) return false;
   if (!Array.isArray(v.off) || v.off.length > 4 || !v.off.every((x) => isStr(x))) return false;
   if (!Array.isArray(v.pd) || v.pd.length > 8 || !v.pd.every((r) => Array.isArray(r) && r.length === 3 && r.every(isNum))) return false;
   if (typeof v.pr !== 'string' || v.pr.length > 200) return false;

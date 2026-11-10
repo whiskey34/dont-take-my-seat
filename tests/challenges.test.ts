@@ -235,18 +235,50 @@ describe('iced coffee', () => {
 });
 
 describe('power-ups', () => {
-  it('one lies on the floor every stop and is picked up by walking over it', () => {
+  it('1 to 3 lie on the floor every stop, apart, and are picked up by walking over them', () => {
+    const counts = new Set<number>();
+    const kinds = new Set<string>();
+    for (let seed = 1; seed <= 40; seed++) {
+      const s = createGame(four, seed);
+      runUntil(s, (x) => x.phase === 'riding');
+      expect(s.powerUps.length).toBeGreaterThanOrEqual(1);
+      expect(s.powerUps.length).toBeLessThanOrEqual(3);
+      counts.add(s.powerUps.length);
+      for (const u of s.powerUps) kinds.add(u.kind);
+    }
+    expect([...counts].sort()).toEqual([1, 2, 3]);
+    expect([...kinds].sort()).toEqual(['coffee', 'earphones', 'mbg', 'sleep']);
     const s = createGame(four, 11);
     runUntil(s, (x) => x.phase === 'riding');
-    expect(s.powerUps).toHaveLength(1);
+    const n = s.powerUps.length;
     const item = s.powerUps[0]!;
     const a = s.players[0]!;
     a.pos = { ...item.pos };
     const ev = step(s, new Map(), DT);
     expect(ev).toContainEqual({ type: 'powerUp', playerId: 'a', kind: item.kind });
-    expect(s.powerUps).toHaveLength(0);
-    if (item.kind === 'earphones') expect(a.shieldUntil).toBeGreaterThan(s.time);
-    else expect(a.sleeping).toBe(true);
+    expect(s.powerUps).toHaveLength(n - 1);
+  });
+
+  it('the MBG tray is spoiled: green and slow for a few seconds', () => {
+    const s = createGame(four, 11);
+    runUntil(s, (x) => x.phase === 'riding');
+    const a = s.players[0]!;
+    const b = s.players[1]!;
+    s.standers = [];
+    s.puddles = [];
+    s.brakeAt = null;
+    a.pos = { x: -6, z: 0.4 };
+    b.pos = { x: -6, z: -0.4 };
+    a.boostUntil = s.time + 3;
+    s.powerUps = [{ id: 99, kind: 'mbg', pos: { ...a.pos } }];
+    step(s, new Map(), DT);
+    expect(a.sickUntil).toBeCloseTo(s.time + CONFIG.powerUp.sickTime, 1);
+    expect(a.boostUntil).toBe(0); // spoils the coffee too
+    const go = { moveX: 1, moveZ: 0, action: false };
+    const ax = a.pos.x;
+    const bx = b.pos.x;
+    for (let i = 0; i < 60; i++) step(s, new Map([['a', go], ['b', go]]), DT);
+    expect(a.pos.x - ax).toBeLessThan((b.pos.x - bx) * 0.7);
   });
 
   it('earphones make pushes bounce off', () => {

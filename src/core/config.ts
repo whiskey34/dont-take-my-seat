@@ -69,7 +69,7 @@ export const CONFIG = {
     // Rush hour (special event): the aisle fills with standing passengers.
     rushChance: 0.25, // per stop (not the first or the last)
     rushMax: 2, // per game
-    rushCount: 12,
+    rushCount: 22,
     rushLane: 0.55, // they stay in the middle of the aisle, clear of the seats
     rushSqueeze: 0.3, // how much of an overlap is pushed back per tick (1 = solid)
     rushDrag: 0.55, // speed kept while squeezing through
@@ -96,6 +96,10 @@ export const CONFIG = {
     shieldTime: 4,
     boostTime: 5, // iced coffee
     boostSpeed: 1.4, // times normal speed
+    sickTime: 5, // MBG tray: green and slow
+    sickSpeed: 0.55,
+    /** 1 to 3 items lie on the floor at every stop. */
+    perStop: [1, 3],
   },
 
   /**

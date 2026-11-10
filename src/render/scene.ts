@@ -12,6 +12,10 @@ const HALF_X = car.halfLength + 0.6; // outer end walls
 const WALL_Z = 2.3;
 const WALL_H = 2.2;
 
+/** Food poisoning (MBG tray): skin colour and stink puffs. */
+const SICK_GREEN = '#7dc95e';
+const sickColor = new THREE.Color(SICK_GREEN);
+
 const npcSkin = (id: number): string => SCENE.npcSkins[(id * 3) % SCENE.npcSkins.length]!;
 
 interface NpcAnim {
@@ -30,6 +34,8 @@ interface PlayerView {
   flight: { at: number; from: THREE.Vector3; until: number } | null; // kicked off a seat
   stars: THREE.Group; // dizzy stars over the head after being kicked
   dazed: boolean;
+  skin: THREE.Color;
+  sick: number; // 0..1 green tint
 }
 
 /**
@@ -307,18 +313,83 @@ export class TrainScene {
         g.add(cube);
       });
       g.add(cup, rim);
+    } else if (kind === 'mbg') {
+      this.buildTray(g);
     } else {
       const pillow = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.12, 0.26), mat(SCENE.pillow));
       const moon = new THREE.Mesh(new THREE.IcosahedronGeometry(0.07, 1), mat('#fde68a'));
       moon.position.set(0.12, 0.16, 0);
       g.add(pillow, moon);
     }
-    const glow = new THREE.Mesh(new THREE.RingGeometry(0.22, 0.32, 24), new THREE.MeshBasicMaterial({ color: kind === 'earphones' ? SCENE.earphones : kind === 'coffee' ? SCENE.coffee : SCENE.pillow, transparent: true, opacity: 0.6, depthWrite: false }));
+    const glow = new THREE.Mesh(new THREE.RingGeometry(0.22, 0.32, 24), new THREE.MeshBasicMaterial({ color: kind === 'earphones' ? SCENE.earphones : kind === 'coffee' ? SCENE.coffee : kind === 'mbg' ? SICK_GREEN : SCENE.pillow, transparent: true, opacity: 0.6, depthWrite: false }));
     glow.rotation.x = -Math.PI / 2;
     glow.userData.floor = true;
     g.add(glow);
-    g.scale.setScalar(kind === 'coffee' ? 2.2 : 1.8);
+    g.scale.setScalar(kind === 'coffee' ? 2.2 : kind === 'mbg' ? 2.3 : 1.8);
     return g;
+  }
+
+  /**
+   * A stainless school-lunch tray with five compartments: rice, vegetables,
+   * a side dish, an orange and a small milk carton. Green puffs rise from it:
+   * it has gone bad.
+   */
+  private buildTray(g: THREE.Group): void {
+    const lam = (c: string) => new THREE.MeshLambertMaterial({ color: c });
+    const steel = new THREE.MeshPhongMaterial({ color: '#c9ced4', specular: '#ffffff', shininess: 80 });
+    const tray = new THREE.Group();
+    tray.rotation.x = 0.6; // tilted toward the camera so the food shows
+    tray.position.y = 0.08;
+    const base = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.03, 0.32), steel);
+    tray.add(base);
+    // Raised rim and dividers.
+    const wall = (w: number, d: number, x: number, z: number) => {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(w, 0.04, d), steel);
+      m.position.set(x, 0.03, z);
+      tray.add(m);
+    };
+    wall(0.44, 0.015, 0, -0.155);
+    wall(0.44, 0.015, 0, 0.155);
+    wall(0.015, 0.32, -0.215, 0);
+    wall(0.015, 0.32, 0.215, 0);
+    wall(0.44, 0.012, 0, -0.02); // splits top and bottom rows
+    wall(0.012, 0.135, -0.075, -0.09);
+    wall(0.012, 0.135, 0.075, -0.09);
+    wall(0.012, 0.17, -0.075, 0.07);
+    // Top row: vegetables, rice, side dish.
+    for (let i = 0; i < 9; i++) {
+      const piece = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.02, 0.03), lam(i % 3 === 0 ? '#f28b30' : '#4f9a3a'));
+      piece.position.set(-0.17 + (i % 3) * 0.04, 0.03, -0.12 + Math.floor(i / 3) * 0.04);
+      piece.rotation.y = i;
+      tray.add(piece);
+    }
+    const rice = new THREE.Mesh(new THREE.SphereGeometry(0.055, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2), lam('#f7f5ee'));
+    rice.scale.y = 0.7;
+    rice.position.set(0, 0.015, -0.085);
+    const side = new THREE.Mesh(new THREE.SphereGeometry(0.05, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2), lam('#b98552'));
+    side.scale.y = 0.5;
+    side.position.set(0.145, 0.015, -0.085);
+    // Bottom row: an orange, and a small carton of milk (no brand).
+    const orange = new THREE.Mesh(new THREE.SphereGeometry(0.045, 14, 10), lam('#f2a31b'));
+    orange.position.set(-0.145, 0.045, 0.07);
+    const carton = new THREE.Group();
+    const box = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.05, 0.08), lam('#f4f7fb'));
+    const band = new THREE.Mesh(new THREE.BoxGeometry(0.132, 0.02, 0.082), lam('#3a6fd8'));
+    band.position.y = -0.01;
+    const straw = new THREE.Mesh(new THREE.CylinderGeometry(0.005, 0.005, 0.06, 6), lam('#e5484d'));
+    straw.position.set(0.04, 0.05, 0);
+    carton.add(box, band, straw);
+    carton.position.set(0.06, 0.04, 0.07);
+    tray.add(rice, side, orange, carton);
+    g.add(tray);
+    // Stink puffs.
+    const puff = new THREE.MeshBasicMaterial({ color: SICK_GREEN, transparent: true, opacity: 0.75, depthWrite: false });
+    [-0.09, 0.03, 0.12].forEach((x, i) => {
+      const p = new THREE.Mesh(new THREE.SphereGeometry(0.035 - i * 0.004, 10, 8), puff);
+      p.position.set(x, 0.26 + i * 0.06, 0);
+      p.userData.puff = i;
+      g.add(p);
+    });
   }
 
   // ------------------------------------------------------------ players
@@ -356,7 +427,7 @@ export class TrainScene {
       fig.root.position.set(p.pos.x, 0, p.pos.z);
       fig.root.rotation.order = 'YXZ'; // lean follows the facing direction
       this.scene.add(fig.root);
-      this.players.set(p.id, { fig, ring, shield, visible: 1, kick: null, flight: null, stars, dazed: false });
+      this.players.set(p.id, { fig, ring, shield, visible: 1, kick: null, flight: null, stars, dazed: false, skin: new THREE.Color('#f0c9a4'), sick: 0 });
     }
   }
 
@@ -674,8 +745,12 @@ export class TrainScene {
       dy = Math.atan2(Math.sin(dy), Math.cos(dy));
       r.rotation.y += dy * turn;
       setSeated(v.fig, p.seatId !== null);
+      // Turns green while poisoned, back to normal after.
+      const sick = state.time < p.sickUntil && !p.eliminated;
+      v.sick += ((sick ? 1 : 0) - v.sick) * Math.min(1, dt * 5);
+      (v.fig.head.material as THREE.MeshLambertMaterial).color.copy(v.skin).lerp(sickColor, v.sick * 0.85);
       const stunned = state.time < p.stunnedUntil;
-      r.rotation.z = stunned ? Math.sin(this.clock * 40) * 0.15 : 0;
+      r.rotation.z = stunned ? Math.sin(this.clock * 40) * 0.15 : sick ? Math.sin(this.clock * 6) * 0.07 : 0; // poisoned: a bit wobbly
       this.animateKick(v, p, stunned);
       if (v.ring) v.ring.visible = p.seatId === null;
       v.shield.visible = state.time < p.shieldUntil && !p.eliminated;
@@ -843,7 +918,8 @@ export class TrainScene {
         this.items.set(u.id, g);
       }
       g.position.set(u.pos.x, 0.45 + Math.sin(this.clock * 3 + u.id) * 0.1, u.pos.z);
-      g.rotation.y = this.clock * 1.8;
+      g.rotation.y = u.kind === 'mbg' ? Math.sin(this.clock * 1.5 + u.id) * 0.5 : this.clock * 1.8;
+      for (const c of g.children) if (c.userData.puff !== undefined) c.position.y = 0.24 + ((this.clock * 0.25 + c.userData.puff * 0.33) % 1) * 0.22;
       for (const c of g.children) if (c.userData.floor) c.position.y = (-g.position.y + 0.02) / g.scale.y;
     }
     for (const [id, g] of this.items) {

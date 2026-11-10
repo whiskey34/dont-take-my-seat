@@ -157,7 +157,7 @@ export class Hud {
           this.flash(t('brakeNow'), 'bad', 1200);
           break;
         case 'powerUp':
-          if (e.playerId === me) this.flash(e.kind === 'earphones' ? t('gotEarphones') : e.kind === 'coffee' ? t('gotCoffee') : t('gotSleep'), 'good', 1800);
+          if (e.playerId === me) this.flash(e.kind === 'earphones' ? t('gotEarphones') : e.kind === 'coffee' ? t('gotCoffee') : e.kind === 'mbg' ? t('gotMbg') : t('gotSleep'), e.kind === 'mbg' ? 'bad' : 'good', 1800);
           break;
         case 'shielded':
           if (e.playerId === me) this.flash(t('shieldBlocked'), 'good', 1000);
@@ -291,7 +291,7 @@ export class Hud {
 
   /** Name plus icons for active power-ups. */
   private tagText(p: Player, time: number): string {
-    const icons = (time < p.shieldUntil ? ' 🎧' : '') + (time < p.boostUntil ? ' 🧋' : '') + (p.sleeping ? ' 💤' : '');
+    const icons = (time < p.shieldUntil ? ' 🎧' : '') + (time < p.boostUntil ? ' 🧋' : '') + (time < p.sickUntil ? ' 🤢' : '') + (p.sleeping ? ' 💤' : '');
     return this.displayName(p) + icons;
   }
 
