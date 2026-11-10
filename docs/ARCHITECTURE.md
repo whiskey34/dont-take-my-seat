@@ -68,7 +68,8 @@ RtcHost/JoinTransport          MessengerTransport
 - Saat perangkat dengan kunci yang sama menyapa lagi, host menyambungkannya ke id pemain lamanya, lalu mengirim ulang `welcome` dan `start` plus snapshot terbaru, sehingga pemain melanjutkan di posisi dan kondisi saat itu. Orang asing tetap ditolak (`started`) selama game berjalan.
 - **Sinyal terganggu** (`ClientNet`): koneksi yang putus tanpa pesan `bye` dari host, atau tidak ada data dari host selama 4 detik saat game berjalan, dilaporkan sebagai `lost` (bukan "host keluar"). Pemain tetap di layar game dengan tanda *Sinyal terganggu, menyambung ulang…*, lalu otomatis bergabung lagi dengan kunci yang sama, dan host mengembalikannya ke karakternya di posisi saat ini. Tidak perlu penyimpanan di server: host sudah memegang seluruh state game. Kalau gagal dalam 60 detik, barulah kembali ke menu.
 - Menu menampilkan tombol **Gabung lagi ke room KODE** selama 30 menit setelah bergabung dengan kode room. Tombol ini hilang kalau room ditutup atau menolak.
-- Pemain yang sudah keluar saat host memulai game berikutnya tidak diikutkan; tempatnya diisi bot.
+- Pemain yang sudah keluar saat host memulai game berikutnya tidak diikutkan. Room tidak memakai bot: minimal 2 pemain, tempat kosong dibiarkan kosong; kalau host tinggal sendiri setelah game, host kembali ke lobby.
+- **Nomor input** (`ClientNet.inputSeq`) terus naik selama koneksi, tidak diulang dari 1 di setiap game. Dulu nomor diulang, sementara input terakhir dari game sebelumnya (bernomor tinggi) masih dalam perjalanan saat game baru dimulai; host lalu menganggap semua input baru "lama" dan mengabaikannya, sehingga pemain tersangkut di posisi awal (terlihat di panel debug sebagai `sent #266 ack #1678`). Sebagai pengaman, host juga mengikuti nomor yang tiba-tiba jauh lebih kecil (selisih lebih dari 600).
 - Host tidak bisa digantikan: kalau host keluar, room berakhir untuk semua pemain.
 
 ## Alur satu ronde

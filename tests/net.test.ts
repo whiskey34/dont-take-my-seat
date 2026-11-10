@@ -6,6 +6,7 @@ import { HostNet, uniqueName } from '../src/net/host';
 import { applySnapshot, packSnapshot, parseClientMsg, parseHostMsg } from '../src/net/protocol';
 import { HandlerSlot, type Channel, type Transport, type TransportHandlers } from '../src/net/transport';
 import { NO_INPUT } from '../src/core/types';
+import { botThink, createBrain } from '../src/ai/bot';
 
 /** In-memory network: a hub that delivers messages on the next pump. */
 class Hub {
@@ -175,9 +176,12 @@ describe('host and clients', () => {
     for (let i = 0; i < 3; i++) hub.pump();
     expect(clients.every((c) => c.rec.session)).toBe(true);
     const dt = 1 / 60;
-    for (let tick = 0; tick < 60 * 120 && session.state.phase !== 'gameOver'; tick++) {
-      session.update(dt, NO_INPUT);
-      for (const c of clients) c.rec.session!.update(dt, NO_INPUT);
+    // Everyone plays like a bot, decided from the host's state.
+    const brains = new Map(['H', 'A', 'B'].map((id, i) => [id, createBrain(i + 3)]));
+    const think = (id: string) => botThink(session.state, session.state.players.find((p) => p.id === id)!, brains.get(id)!, dt);
+    for (let tick = 0; tick < 60 * 180 && session.state.phase !== 'gameOver'; tick++) {
+      session.update(dt, think('H'));
+      clients.forEach((c, i) => c.rec.session!.update(dt, think(['A', 'B'][i]!)));
       hub.pump();
     }
     for (let i = 0; i < 30; i++) {
@@ -254,7 +258,8 @@ describe('host and clients', () => {
     expect(moved).toBeGreaterThan(60);
     // Before input acknowledgements the shown speed dropped to ~2.4 m/s (stiff controls).
     expect(speed / moved).toBeGreaterThan(CONFIG.player.speed * 0.85);
-    expect(backwards).toBeLessThanOrEqual(3);
+    // A few corrections when bumping into the other (standing) players.
+    expect(backwards).toBeLessThanOrEqual(8);
   });
 
   it('starts the next game with everyone\'s points carried over', () => {
@@ -277,11 +282,41 @@ describe('host and clients', () => {
     expect(a.view().players.find((p) => p.id === 'B')!.score).toBe(15);
   });
 
-  it('names bots bot_user_1, bot_user_2, …', () => {
+  it('room games have no bots: empty places stay empty', () => {
     const { hub, host } = setupRoom();
     const session = host.start('normal', 5);
     hub.pump();
-    expect(session.state.players.map((p) => p.name)).toEqual(['Host', 'Player A', 'Player B', 'bot_user_1']);
+    expect(session.state.players.map((p) => p.name)).toEqual(['Host', 'Player A', 'Player B']);
+    expect(session.state.players.some((p) => p.isBot)).toBe(false);
+  });
+
+  it('inputs still count in the next game (stuck-player bug: input numbers restarting at 1)', () => {
+    const { hub, host, clients } = setupRoom();
+    hub.latency = 4;
+    let session = host.start('normal', 5);
+    for (let i = 0; i < 10; i++) hub.pump();
+    const a = clients[0]!.rec;
+    const walk = { moveX: 1, moveZ: 0, action: false };
+    // Long first game: A's input numbers climb high.
+    for (let i = 0; i < 60 * 20; i++) {
+      a.session!.update(1 / 60, walk);
+      session.update(1 / 60, NO_INPUT);
+      hub.pump();
+    }
+    // Next game starts while A's last inputs are still on their way.
+    session = host.start('normal', 6);
+    for (let i = 0; i < 60 * 3 && session.state.phase !== 'riding'; i++) {
+      a.session!.update(1 / 60, walk);
+      session.update(1 / 60, NO_INPUT);
+      hub.pump();
+    }
+    const startX = session.state.players.find((p) => p.id === 'A')!.pos.x;
+    for (let i = 0; i < 40; i++) {
+      a.session!.update(1 / 60, { moveX: -1, moveZ: 0, action: false });
+      session.update(1 / 60, NO_INPUT);
+      hub.pump();
+    }
+    expect(session.state.players.find((p) => p.id === 'A')!.pos.x).toBeLessThan(startX - 0.5);
   });
 
   it('keeps a disconnected player in the game (no bot), standing still and shown offline', () => {
@@ -354,7 +389,12 @@ describe('host and clients', () => {
     hub.pump();
     hub.pump();
     const next = host.start('normal', 6);
-    expect(next.state.players.map((p) => p.name)).toEqual(['Host', 'Player A', 'bot_user_1', 'bot_user_2']);
+    expect(next.state.players.map((p) => p.name)).toEqual(['Host', 'Player A']);
+    // Alone again: no game without at least one friend.
+    clients[0]!.net.leave();
+    hub.pump();
+    expect(host.canStart).toBe(false);
+    expect(() => host.start('normal', 7)).toThrow();
   });
 
   it('tells clients when the host leaves', () => {
@@ -410,6 +450,6 @@ describe('host and clients', () => {
     const me = back!.view().players.find((p) => p.id === back!.humanId)!;
     expect(back!.humanId).toBe('A');
     expect(Math.hypot(me.pos.x - where.x, me.pos.z - where.z)).toBeLessThan(0.3);
-    expect(session.state.players.filter((p) => p.isBot).length).toBe(1); // no bot took over
+    expect(session.state.players.filter((p) => p.isBot).length).toBe(0); // no bot took over
   });
 });

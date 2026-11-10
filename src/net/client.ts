@@ -32,6 +32,7 @@ export class ClientNet {
   private myId: string | null = null;
   private session: ClientSession | null = null;
   private done = false;
+  private inputSeq = 0;
   private lastHeard = Date.now();
   private readonly watchdog: ReturnType<typeof setInterval>;
   private readonly onVisible = () => {
@@ -114,7 +115,11 @@ export class ClientNet {
         if (!this.myId) return;
         this.lastHeard = Date.now();
         this.session?.dispose();
-        this.session = new ClientSession(this.myId, msg.players, msg.seed, (m) => this.send(m));
+        // Input numbers keep counting across games on this connection. If each new
+        // game started again at 1, the host could still be holding a higher number
+        // from the last game (inputs in flight while the next game started) and
+        // would ignore every input until we caught up: the "stuck player" bug.
+        this.session = new ClientSession(this.myId, msg.players, msg.seed, (m) => this.send(m), () => ++this.inputSeq);
         this.cb.start(this.session);
         break;
       case 'snap':
@@ -168,13 +173,12 @@ export class ClientSession implements GameSession {
   private events: GameEvent[] = [];
   private clock = 0;
   private offset: number | null = null; // host time - local clock
-  private seq = 0;
   private lastSent = { x: 0, z: 0, at: -1 };
   private moveSeq = -1;
   private maxInput = 0; // strongest stick input in the last few seconds (debug)
   private maxInputAt = 0;
   /** Stuck detector (debug): pushing the stick for a second while the host does not move us. */
-  private push = { since: -1, from: { x: 0, z: 0 } };
+  private push = { since: -1, from: { x: 0, z: 0 }, dir: { x: 0, z: 0 } };
   private stuckLog: string[] = [];
   private history: Frame[] = [];
   private reconciledAt = -1; // host time of the snapshot we last reconciled with
@@ -189,6 +193,7 @@ export class ClientSession implements GameSession {
     setups: readonly PlayerSetup[],
     seed: number,
     private readonly sendMsg: (m: ClientMsg) => void,
+    private readonly nextSeq: () => number = counter(),
   ) {
     this.state = createGame(setups, seed);
     const me = this.state.players.find((p) => p.id === humanId);
@@ -262,7 +267,9 @@ export class ClientSession implements GameSession {
       this.push.since = -1;
       return;
     }
-    if (this.push.since < 0) this.push = { since: this.clock, from: { ...server.pos } };
+    // Only a steady push counts (walking back and forth goes nowhere on purpose).
+    const turned = input.moveX * this.push.dir.x + input.moveZ * this.push.dir.z < 0.7;
+    if (this.push.since < 0 || turned) this.push = { since: this.clock, from: { ...server.pos }, dir: { x: input.moveX, z: input.moveZ } };
     if (this.clock - this.push.since < 1.2) return;
     const moved = Math.hypot(server.pos.x - this.push.from.x, server.pos.z - this.push.from.z);
     if (moved < 0.1) {
@@ -273,7 +280,7 @@ export class ClientSession implements GameSession {
       );
       this.stuckLog.length = Math.min(this.stuckLog.length, 3);
     }
-    this.push = { since: this.clock, from: { ...server.pos } };
+    this.push = { since: this.clock, from: { ...server.pos }, dir: { x: input.moveX, z: input.moveZ } };
   }
 
   private sendInput(input: PlayerInput): void {
@@ -283,10 +290,10 @@ export class ClientSession implements GameSession {
       this.maxInput = mag;
       this.maxInputAt = this.clock;
     }
-    if (input.action) this.sendMsg({ t: 'act', s: ++this.seq });
+    if (input.action) this.sendMsg({ t: 'act', s: this.nextSeq() });
     const changed = Math.abs(input.moveX - this.lastSent.x) > 0.05 || Math.abs(input.moveZ - this.lastSent.z) > 0.05;
     if (changed || this.clock - this.lastSent.at >= INPUT_INTERVAL) {
-      this.moveSeq = ++this.seq;
+      this.moveSeq = this.nextSeq();
       this.sendMsg({ t: 'in', s: this.moveSeq, x: round2(input.moveX), z: round2(input.moveZ) });
       this.lastSent = { x: input.moveX, z: input.moveZ, at: this.clock };
     }
@@ -408,3 +415,8 @@ export class ClientSession implements GameSession {
 }
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
+
+function counter(): () => number {
+  let n = 0;
+  return () => ++n;
+}

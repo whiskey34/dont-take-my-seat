@@ -503,9 +503,10 @@ class App {
     const status = $('lobbyStatus');
     status.classList.remove('warn');
     if (this.net?.kind === 'host') {
-      $<HTMLButtonElement>('btnLobbyStart').disabled = false;
+      const ready = this.net.host.canStart;
+      $<HTMLButtonElement>('btnLobbyStart').disabled = !ready;
       const reachable = this.relayUp();
-      status.textContent = reachable ? t('botsFill') : t('relayDown');
+      status.textContent = !reachable ? t('relayDown') : ready ? t('readyToStart') : t('needTwo');
       status.classList.toggle('warn', !reachable);
     } else if (players.length > 0) {
       status.textContent = t('waitingHost');
@@ -514,7 +515,20 @@ class App {
 
   private startNetGame(scores: ReadonlyMap<string, number> = new Map()): void {
     if (this.net?.kind !== 'host') return;
-    this.beginGame(this.net.host.start(this.settings.difficulty, this.nextSeed(), scores));
+    const host = this.net.host;
+    if (!host.canStart) return this.backToLobby();
+    this.beginGame(host.start(this.settings.difficulty, this.nextSeed(), scores));
+  }
+
+  /** Everyone else left after a game: wait in the lobby for friends again. */
+  private backToLobby(): void {
+    if (this.net?.kind !== 'host') return;
+    window.clearInterval(this.nextGameTimer);
+    this.net.host.endGame();
+    this.mode = 'lobby';
+    this.hud.show(false);
+    this.show('lobby');
+    this.renderLobby(this.net.host.players);
   }
 
   private postChatResult(view: GameState): void {

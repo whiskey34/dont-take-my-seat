@@ -92,16 +92,18 @@ export class HostNet {
     this.publishLobby();
   }
 
-  /** Starts (or restarts) a game with everyone connected; bots fill the rest. */
+  /** Enough people connected to play (room games have no bots). */
+  get canStart(): boolean {
+    return this.members.filter((m) => m.peer !== null).length >= 2;
+  }
+
+  /** Starts (or restarts) a game with everyone connected. Empty places stay empty. */
   start(difficulty: Difficulty, seed: number, scores: ReadonlyMap<string, number> = new Map()): HostSession {
+    if (!this.canStart) throw new Error('Need at least 2 players');
     this.game?.session.dispose();
     // People who left before this game starts are not kept.
     this.members = this.members.filter((m) => m.peer !== null);
     const setups: PlayerSetup[] = this.members.map((p) => ({ id: p.id, name: p.name, isBot: false, score: scores.get(p.id) ?? 0 }));
-    for (let i = 1; setups.length < CONFIG.maxPlayers; i++) {
-      const id = `bot${i}`;
-      setups.push({ id, name: botName(i), isBot: true, score: scores.get(id) ?? 0 });
-    }
     const session = new HostSession(this.transport, setups, seed, difficulty, () => this.peerIds(), () => this.offline);
     this.game = { session, seed, setups, difficulty };
     this.broadcast('reliable', { t: 'start', seed, players: setups, difficulty });
@@ -205,6 +207,9 @@ export class HostNet {
   }
 }
 
+/** Inputs arrive ~60 per second; 600 behind is 10 s, far more than any reordering. */
+const RESTART_GAP = 600;
+
 interface RemoteInput {
   x: number;
   z: number;
@@ -246,8 +251,10 @@ export class HostSession implements GameSession {
     r.at = Date.now();
     r.count++;
     if (msg.t === 'act') r.action = true;
-    else if (msg.s > r.seq) {
-      // Older packets on the unordered channel are ignored.
+    // Older packets on the unordered channel are ignored. A number far below the
+    // last one means the player's device started counting again (e.g. reloaded):
+    // follow it instead of ignoring the player from then on.
+    else if (msg.s > r.seq || r.seq - msg.s > RESTART_GAP) {
       r.seq = msg.s;
       r.x = msg.x;
       r.z = msg.z;
