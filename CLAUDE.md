@@ -2,7 +2,7 @@
 
 Dibaca otomatis di setiap sesi baru. **Isi file ini lebih baru daripada skill `dont-take-my-seat-dev`**. Kalau keduanya bertentangan, ikuti file ini dan `docs/ARCHITECTURE.md`.
 
-Terakhir diperbarui: 11 November 2026, versi **0.18.0**, protokol **v10**.
+Terakhir diperbarui: 11 November 2026, versi **0.18.1**, protokol **v10**.
 
 ## Pengguna
 
@@ -22,7 +22,7 @@ Terakhir diperbarui: 11 November 2026, versi **0.18.0**, protokol **v10**.
 | Host keluar = room selesai | **Host pindah** ke pemain berikutnya dengan kode room yang sama (lihat ARCHITECTURE, *Keluar dan bergabung lagi*) |
 | 3 challenge, 2 power-up | Lihat daftar di bawah |
 
-## Gameplay saat ini (v0.18.0)
+## Gameplay saat ini (v0.18.1)
 
 - Perjalanan nyata Commuter Line Bogor (+ cabang Nambo), 8 stasiun acak per game (`pickRoute`, `BOGOR_LINE`, `NAMBO_BRANCH` di `config.ts`).
 - Kursi makin sedikit (`CONFIG.seats`): stop 1–2 lebih banyak dari pemain, stop 3–4 kurang satu, stop 5+ kurang dua, stasiun terakhir cuma 1 kursi.
@@ -31,7 +31,7 @@ Terakhir diperbarui: 11 November 2026, versi **0.18.0**, protokol **v10**.
 - **Event spesial**: `rushHour` (25% per stop selain pertama/terakhir, maks 2 per game, 22 penumpang berdiri, +4 detik); **kursi prioritas pindah** (30%, berkedip merah dulu, +3 detik).
 - **Menendang penumpang NPC yang duduk**: pertama −20 poin, kedua kali petugas KRL membawamu keluar (gugur). Ada model petugas, animasi, peluit.
 - **Item di lantai, 1–3 per stop** (`POWER_UP_KINDS`): `earphones` (kebal dorong 4 dtk), `sleep` (aman sekali di kursi prioritas), `coffee` (es kopi, 1,4× cepat 5 dtk), `mbg` (ompreng MBG basi: hijau dan lambat 5 dtk, membatalkan kopi).
-- **Poin**: +10 per stasiun duduk, +5 per tendangan, +50 menang. Game selesai saat tinggal 1 pemain → **popup juara** (podium Juara 1–3 + posisi lain, confetti) dengan tombol **Lanjutkan**/**Keluar**, tanpa timer (di room hanya host yang melanjutkan); poin terbawa.
+- **Poin**: +10 per stasiun duduk, +5 per tendangan, +50 menang. Game selesai saat tinggal 1 pemain → **popup juara** (daftar, Juara 1 paling atas dengan medali 🥇🥈🥉, tanpa podium; confetti) dengan tombol **Lanjutkan**/**Keluar**, tanpa timer (di room hanya host yang melanjutkan); poin terbawa.
 - **Papan peringkat** lewat Worker `/scores` (`src/net/leaderboard.ts`).
 - **Host keluar → pemain berikutnya jadi host** (notifikasi 👑, kode sama, poin terbawa). HP host mati → pengganti ambil alih setelah 8 dtk. **Gabung lagi** ke room kosong → dibuka lagi sebagai host (10 dtk).
 - Karakter chibi bulat, animasi tendang, bintang pusing. **Tips nyala secara default, tiap tips sekali di awal** (`settings.tipsDone`; pengaturan Tips Nyala/Mati dan tombol Tampilkan tips lagi).
@@ -73,6 +73,7 @@ Cek browser dengan Playwright sesuai skill (viewport 844×390, `?signal=local` u
 - 11 Nov (v0.15.0): rush hour lebih padat, ompreng MBG basi, 1–3 item acak per stop.
 - 11 Nov (v0.16.0): perbaikan zoom di Safari iPhone, tips wajib muncul secara default (bisa dimatikan).
 - 11 Nov (v0.17.0): host pindah otomatis ke pemain berikutnya, room kosong bisa dibuka lagi lewat Gabung lagi, tips kembali sekali di awal (tetap default nyala).
-- 11 Nov (v0.18.0): popup juara dengan podium dan confetti, tombol Lanjutkan tanpa hitung mundur otomatis.
+- 11 Nov (v0.18.0): popup juara dengan confetti, tombol Lanjutkan tanpa hitung mundur otomatis.
+- 11 Nov (v0.18.1): podium diganti daftar (Juara 1 paling atas).
 
 Saat sesi selesai, perbarui bagian **Gameplay saat ini**, **Pekerjaan terbuka**, dan **Riwayat singkat** di file ini.

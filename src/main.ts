@@ -779,42 +779,24 @@ class App {
     const el = (tag: string, cls: string, text = '') => Object.assign(document.createElement(tag), { className: cls, textContent: text });
     const MEDALS = ['🥇', '🥈', '🥉'];
 
-    // Podium: 2nd, 1st, 3rd from left to right.
-    const slots = [ranked[1], ranked[0], ranked[2]];
-    $('podium').replaceChildren(
-      ...slots.map((p, i) => {
-        const col = el('div', `step step-${[2, 1, 3][i]}`);
-        if (!p) {
-          col.classList.add('empty');
-          return col;
-        }
-        const place = placeOf(p);
-        if (p.id === me) col.classList.add('me');
-        const avatar = el('span', 'avatar', MEDALS[place - 1] ?? String(place));
-        avatar.style.setProperty('--c', PLAYER_COLORS[p.colorIndex % PLAYER_COLORS.length]!);
-        const gain = gainOf(p);
-        col.append(
-          avatar,
-          el('b', 'who', nameOf(p)),
-          el('span', 'pts', t('points', { n: p.score }) + (gain > 0 ? ` ${t('pointsGained', { n: gain })}` : '')),
-          el('div', 'block', t('placeN', { n: place })),
-        );
-        col.style.animationDelay = `${[0.25, 0.05, 0.45][i]}s`;
-        return col;
-      }),
-    );
-    // Everyone below the podium.
+    // Everyone in order, the champion on top.
     $('standings').replaceChildren(
-      ...ranked.slice(3).map((p) => {
-        const li = el('li', p.id === me ? 'me' : '');
+      ...ranked.map((p) => {
+        const place = placeOf(p);
+        const li = el('li', `place-${Math.min(place, 4)}${p.id === me ? ' me' : ''}`);
         const dot = el('span', 'dot');
         dot.style.background = PLAYER_COLORS[p.colorIndex % PLAYER_COLORS.length]!;
         const gain = gainOf(p);
-        li.append(el('span', 'place', `#${placeOf(p)}`), dot, el('b', '', nameOf(p)), el('span', 'pts', t('points', { n: p.score })), el('span', 'gain', gain > 0 ? t('pointsGained', { n: gain }) : ''));
+        li.append(
+          el('span', 'place', MEDALS[place - 1] ?? `#${place}`),
+          dot,
+          el('b', '', nameOf(p)),
+          el('span', 'gain', gain > 0 ? t('pointsGained', { n: gain }) : ''),
+          el('span', 'pts', t('points', { n: p.score })),
+        );
         return li;
       }),
     );
-    $('standings').hidden = ranked.length <= 3;
 
     void this.reportToBoard(g, me);
     // No countdown: everyone chooses to continue or leave. In a room the host
