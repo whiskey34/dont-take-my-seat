@@ -23,6 +23,7 @@ import { LocalSession, type GameSession } from './session/session';
 import { Hud } from './ui/hud';
 import { Tips } from './ui/tips';
 import { layoutSize, preventPageZoom } from './ui/noZoom';
+import { confetti, stopConfetti } from './ui/confetti';
 import { applyPendingUpdate, canInstall, initPwa, install, needsIosHint } from './ui/pwa';
 import { loadSettings, saveSettings } from './ui/settings';
 
@@ -31,7 +32,6 @@ const params = new URLSearchParams(location.search);
 const HUMAN = 'you';
 /** How long the menu offers to rejoin the last room. */
 /** Seconds on the game-over screen before the next game starts by itself. */
-const NEXT_GAME_DELAY_S = 8;
 const REJOIN_WINDOW_MS = 30 * 60 * 1000;
 /** "Rejoin": nobody answering in the room for this long means it is empty; we reopen it as host. */
 const EMPTY_ROOM_MS = 10_000;
@@ -186,6 +186,7 @@ class App {
   }
 
   private setSession(s: GameSession): void {
+    stopConfetti();
     this.session?.dispose();
     this.session = s;
     const view = s.view();
@@ -728,6 +729,7 @@ class App {
     this.attempt = null;
     this.hostFallback = null;
     this.carryScores = null;
+    stopConfetti();
     this.hud.notice('');
     this.leaveNet();
     this.mode = 'menu';
@@ -764,48 +766,65 @@ class App {
     this.mode = 'over';
     const g = this.session.view();
     const me = this.session.humanId;
-    const winner = g.players.find((p) => p.id === g.winnerId);
     const ranked = [...g.players].sort((a, b) => rankKey(b, g) - rankKey(a, g));
-    $('overTitle').textContent = winner?.id === me ? t('youWin') : t('winner', { name: winner?.name ?? '?' });
-    $('overPlace').textContent = `${t('gameNumber', { n: this.gameNo })} · ${t('place', { n: ranked.findIndex((p) => p.id === me) + 1 })}`;
+    // Players knocked out at the same stop share a place (1, 2, 2, 4).
+    const placeOf = (p: (typeof ranked)[number]) => 1 + ranked.filter((q) => rankKey(q, g) > rankKey(p, g)).length;
+    const champ = ranked[0] && ranked[0].id === g.winnerId ? ranked[0] : undefined;
+    $('overTitle').textContent = champ?.id === me ? t('youChampion') : t('champion', { name: champ?.name ?? '?' });
+    const mine = ranked.find((p) => p.id === me);
+    $('overPlace').textContent = mine ? `${t('gameNumber', { n: this.gameNo })} · ${t('yourPlace', { n: placeOf(mine) })}` : t('gameNumber', { n: this.gameNo });
+
+    const nameOf = (p: (typeof ranked)[number]) => (p.id === me ? t('you') : p.name);
+    const gainOf = (p: (typeof ranked)[number]) => p.score - (this.startScores.get(p.id) ?? 0);
+    const el = (tag: string, cls: string, text = '') => Object.assign(document.createElement(tag), { className: cls, textContent: text });
+    const MEDALS = ['🥇', '🥈', '🥉'];
+
+    // Podium: 2nd, 1st, 3rd from left to right.
+    const slots = [ranked[1], ranked[0], ranked[2]];
+    $('podium').replaceChildren(
+      ...slots.map((p, i) => {
+        const col = el('div', `step step-${[2, 1, 3][i]}`);
+        if (!p) {
+          col.classList.add('empty');
+          return col;
+        }
+        const place = placeOf(p);
+        if (p.id === me) col.classList.add('me');
+        const avatar = el('span', 'avatar', MEDALS[place - 1] ?? String(place));
+        avatar.style.setProperty('--c', PLAYER_COLORS[p.colorIndex % PLAYER_COLORS.length]!);
+        const gain = gainOf(p);
+        col.append(
+          avatar,
+          el('b', 'who', nameOf(p)),
+          el('span', 'pts', t('points', { n: p.score }) + (gain > 0 ? ` ${t('pointsGained', { n: gain })}` : '')),
+          el('div', 'block', t('placeN', { n: place })),
+        );
+        col.style.animationDelay = `${[0.25, 0.05, 0.45][i]}s`;
+        return col;
+      }),
+    );
+    // Everyone below the podium.
     $('standings').replaceChildren(
-      ...ranked.map((p) => {
-        const li = document.createElement('li');
-        const dot = document.createElement('span');
-        dot.className = 'dot';
+      ...ranked.slice(3).map((p) => {
+        const li = el('li', p.id === me ? 'me' : '');
+        const dot = el('span', 'dot');
         dot.style.background = PLAYER_COLORS[p.colorIndex % PLAYER_COLORS.length]!;
-        const name = document.createElement('b');
-        name.textContent = p.id === me ? t('you') : p.name;
-        const gain = document.createElement('span');
-        gain.className = 'gain';
-        const earned = p.score - (this.startScores.get(p.id) ?? 0);
-        gain.textContent = earned > 0 ? t('pointsGained', { n: earned }) : '';
-        const pts = document.createElement('span');
-        pts.className = 'pts';
-        pts.textContent = t('points', { n: p.score });
-        li.append(dot, name, pts, gain);
+        const gain = gainOf(p);
+        li.append(el('span', 'place', `#${placeOf(p)}`), dot, el('b', '', nameOf(p)), el('span', 'pts', t('points', { n: p.score })), el('span', 'gain', gain > 0 ? t('pointsGained', { n: gain }) : ''));
         return li;
       }),
     );
+    $('standings').hidden = ranked.length <= 3;
+
     void this.reportToBoard(g, me);
+    // No countdown: everyone chooses to continue or leave. In a room the host
+    // continues for everyone; the others wait (or leave).
     const client = this.net?.kind === 'client';
     $('btnAgain').hidden = client;
-    $('overWait').hidden = false;
-    $('btnMenu').textContent = t('leave');
+    $('overWait').hidden = !client;
+    $('overWait').textContent = client ? t('waitHostContinue') : '';
     this.show('gameover');
-    // Keep playing: the next game starts by itself (the host decides in multiplayer).
-    if (client) {
-      $('overWait').textContent = t('nextGameSoon');
-      return;
-    }
-    let left = NEXT_GAME_DELAY_S;
-    const tick = () => {
-      $('btnAgain').textContent = `${t('continueNow')} (${left})`;
-      $('overWait').textContent = t('nextGameIn', { n: left });
-      if (left-- <= 0) this.playAgain();
-    };
-    tick();
-    this.nextGameTimer = window.setInterval(tick, 1000);
+    confetti();
   }
 
   /** Sends this player's points to the shared leaderboard and shows the rank. */

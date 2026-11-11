@@ -194,14 +194,17 @@
       </section>
 
       <section class="screen dim" id="gameover" hidden>
-        <div class="menu-card">
+        <div class="menu-card over-card">
+          <p class="over-kicker" id="overPlace"></p>
           <h2 id="overTitle"></h2>
-          <p class="tagline" id="overPlace"></p>
+          <div id="podium"></div>
           <ol id="standings"></ol>
           <p class="board-me" id="overRank" hidden></p>
           <p class="tagline" id="overWait" hidden></p>
-          <button class="btn primary" id="btnAgain" data-t="playAgain"></button>
-          <button class="btn" id="btnMenu" data-t="menu"></button>
+          <div class="row over-actions">
+            <button class="btn" id="btnMenu" data-t="leave"></button>
+            <button class="btn primary" id="btnAgain" data-t="continueGame"></button>
+          </div>
         </div>
       </section>
 
