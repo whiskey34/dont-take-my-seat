@@ -22,6 +22,7 @@ import { TrainScene } from './render/scene';
 import { LocalSession, type GameSession } from './session/session';
 import { Hud } from './ui/hud';
 import { Tips } from './ui/tips';
+import { layoutSize, preventPageZoom } from './ui/noZoom';
 import { applyPendingUpdate, canInstall, initPwa, install, needsIosHint } from './ui/pwa';
 import { loadSettings, saveSettings } from './ui/settings';
 
@@ -52,7 +53,6 @@ function cryptoRandom(): number {
 class App {
   private readonly scene = new TrainScene($<HTMLCanvasElement>('scene'));
   private readonly hud = new Hud();
-  private readonly tipsSeen = new Set<string>();
   private tips!: Tips;
   private tipShown = false;
   private readonly controls = new Controls($('stickZone'), $('stickBase'), $('stickKnob'), $('actionBtn'));
@@ -87,8 +87,16 @@ class App {
     onLangChange(() => this.applyTexts());
     this.applyTexts();
     this.bindUi();
+    preventPageZoom();
     this.resize();
     window.addEventListener('resize', () => this.resize());
+    // iPhone reports the new size a moment after rotating or closing the keyboard.
+    const settle = () => {
+      this.resize();
+      window.setTimeout(() => this.resize(), 300);
+    };
+    window.addEventListener('orientationchange', settle);
+    window.visualViewport?.addEventListener('resize', settle);
     // Browsers only allow sound after a tap; players who join from the chat
     // never press "Play", so any tap unlocks it.
     window.addEventListener('pointerdown', () => unlockAudio(), { passive: true });
@@ -98,13 +106,8 @@ class App {
     this.startDemo();
     requestAnimationFrame(this.frame);
     this.startBackgroundTicker();
-    this.settings.tipsSeen.forEach((id) => this.tipsSeen.add(id));
     this.tips = new Tips(
-      this.tipsSeen,
-      () => {
-        this.settings.tipsSeen = [...this.tipsSeen];
-        saveSettings(this.settings);
-      },
+      () => this.settings.tips,
       this.scene,
       () => ({ width: this.width, height: this.height }),
     );
@@ -800,6 +803,7 @@ class App {
     mark('segCtlSide', this.settings.ctlSide);
     mark('segCtlMode', this.settings.ctlMode);
     mark('segVibrate', this.settings.vibrate ? 'on' : 'off');
+    mark('segTips', this.settings.tips ? 'on' : 'off');
     $('rowVibrate').hidden = !('vibrate' in navigator);
     $<HTMLInputElement>('inpSens').value = String(this.settings.sensitivity);
     $<HTMLInputElement>('inpSens2').value = String(this.settings.sensitivity);
@@ -880,10 +884,6 @@ class App {
       else if (this.mode === 'paused') this.resume();
     });
     on('btnBoardClose', () => this.show('menu'));
-    on('btnTipsReset', () => {
-      this.tips.reset();
-      $('btnTipsReset').textContent = t('tipsReset');
-    });
     on('hudPause', () => this.pause());
     on('btnResume', () => this.resume());
     on('btnQuit', () => this.toMenu());
@@ -922,6 +922,10 @@ class App {
       this.settings.ctlMode = v === 'fixed' ? 'fixed' : 'floating';
       this.applyControlSettings();
     });
+    seg('segTips', (v) => {
+      this.settings.tips = v === 'on';
+      if (!this.settings.tips) this.tips.clear();
+    });
     seg('segVibrate', (v) => {
       this.settings.vibrate = v === 'on';
       if (this.settings.vibrate) this.buzz(20);
@@ -945,8 +949,10 @@ class App {
   }
 
   private resize(): void {
-    this.width = window.innerWidth;
-    this.height = window.innerHeight;
+    const { width, height } = layoutSize();
+    if (width === this.width && height === this.height) return;
+    this.width = width;
+    this.height = height;
     this.scene.resize(this.width, this.height);
   }
 

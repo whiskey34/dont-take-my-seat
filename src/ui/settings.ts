@@ -12,8 +12,8 @@ export interface Settings {
   playerKey: string;
   /** The last room joined with a code, for the "Rejoin" button. */
   lastRoom: { code: string; at: number } | null;
-  /** One-time tips already shown on this device. */
-  tipsSeen: string[];
+  /** Show tips for items, challenges and rules during a game (on by default). */
+  tips: boolean;
   /** Touch controls: size, which side the stick is on, stick follows the thumb or stays put, vibration. */
   ctlSize: 's' | 'm' | 'l';
   ctlSide: 'left' | 'right';
@@ -28,7 +28,7 @@ function newPlayerKey(): string {
   return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
 }
 
-const defaults = (): Settings => ({ lang: null, sound: true, difficulty: 'normal', sensitivity: 3, name: '', playerKey: newPlayerKey(), lastRoom: null, tipsSeen: [], ctlSize: 'm', ctlSide: 'left', ctlMode: 'floating', vibrate: true });
+const defaults = (): Settings => ({ lang: null, sound: true, difficulty: 'normal', sensitivity: 3, name: '', playerKey: newPlayerKey(), lastRoom: null, tips: true, ctlSize: 'm', ctlSide: 'left', ctlMode: 'floating', vibrate: true });
 
 /** Settings are a convenience: if storage is unavailable we just use defaults. */
 export function loadSettings(): Settings {
@@ -54,7 +54,7 @@ export function loadSettings(): Settings {
         ctlSide: v.ctlSide === 'right' ? 'right' : 'left',
         ctlMode: v.ctlMode === 'fixed' ? 'fixed' : 'floating',
         vibrate: typeof v.vibrate === 'boolean' ? v.vibrate : true,
-        tipsSeen: Array.isArray(v.tipsSeen) ? v.tipsSeen.filter((x): x is string => typeof x === 'string' && x.length < 30).slice(0, 50) : [],
+        tips: typeof v.tips === 'boolean' ? v.tips : true,
       };
     }
   } catch {

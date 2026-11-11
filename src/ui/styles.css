@@ -33,6 +33,19 @@ body {
   user-select: none;
   -webkit-user-select: none;
   touch-action: none;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+/*
+ * Scrollable panels are their own scroll containers, so the touch-action of
+ * html/body does not reach them: with the default (auto) iPhone Safari let a
+ * pinch or a double tap there zoom the whole game. Scrolling only, no zoom.
+ */
+.screen,
+.menu-card,
+#boardList {
+  touch-action: pan-y;
 }
 
 #app {
@@ -901,6 +914,7 @@ input:focus-visible {
 
 .menu-card.wide {
   max-height: calc(100vh - 24px);
+  max-height: calc(100dvh - 24px);
   overflow-y: auto;
 }
 
@@ -913,7 +927,7 @@ input:focus-visible {
   background: rgba(0, 0, 0, 0.3);
   color: var(--text);
   font: inherit;
-  font-size: 14px;
+  font-size: 16px; /* iPhone zooms into text fields smaller than 16px */
   user-select: text;
   -webkit-user-select: text;
 }
@@ -1072,7 +1086,7 @@ input:focus-visible {
   background: rgba(0, 0, 0, 0.3);
   color: var(--text);
   font: inherit;
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 600;
   user-select: text;
   -webkit-user-select: text;
@@ -1170,6 +1184,11 @@ input:focus-visible {
   --tip-line: #f1e2c8;
   --tip-ink: #1f2a36;
   --tip-text: #3d4a57;
+}
+
+#tips .tipCard,
+#tips .tipScrim {
+  touch-action: none;
 }
 
 #tips:empty {

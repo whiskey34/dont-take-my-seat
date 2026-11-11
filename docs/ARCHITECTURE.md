@@ -114,12 +114,21 @@ intro → riding (kereta jalan, goyang, lalu mengerem)
 - **Pengaturan kontrol**: sensitivitas, ukuran tombol (kecil/sedang/besar), posisi analog (kiri/kanan, tombol aksi pindah ke sisi lain), analog ikut jempol atau tetap, dan getar (duduk, didorong, ditendang, terpeleset). Esc menjeda game.
 - **Ditendang dari kursi**: kilatan merah, yang ditendang terlempar melengkung sambil berputar, lalu bintang-bintang berputar di atas kepalanya selama oleng.
 
-## Tips sekali tampil (`src/ui/tips.ts`)
+## Tips (`src/ui/tips.ts`)
 
-- Pertama kali sebuah item (es kopi, earphone, pura-pura tidur), challenge, atau aturan (kursi prioritas, kursi cukup untuk semua, kursi makin sedikit, stasiun terakhir) muncul, tampil penjelasan singkat yang menunjuk ke benda itu (lingkaran sorotan).
+- **Nyala secara default, di setiap game.** Pertama kali dalam satu game sebuah item (es kopi, earphone, pura-pura tidur), challenge, atau aturan (kursi prioritas, kursi cukup untuk semua, kursi makin sedikit, stasiun terakhir) muncul, tampil penjelasan singkat yang menunjuk ke benda itu (lingkaran sorotan).
 - **Lawan bot:** game dijeda diam-diam (simulasi tidak maju, tanpa label) dan muncul kartu krem dengan tombol *Oke, mengerti!* (Enter/Spasi juga bisa). Kalau ada beberapa tips sekaligus, tampil bergantian.
 - **Multiplayer / chat app:** tidak bisa dijeda, jadi tampil gelembung kecil yang hilang sendiri setelah 2 detik.
-- Tips yang sudah tampil disimpan di pengaturan (`tipsSeen`), jadi tiap tips hanya muncul sekali per perangkat. Tombol *Tampilkan tips lagi* di Pengaturan mengulangnya.
+- Tiap tips tampil sekali per game (`pending` dikosongkan saat game baru). Pengaturan **Tips** (Nyala/Mati, `settings.tips`, default Nyala) mematikannya. `tipsSeen` dari versi lama diabaikan.
+
+## Layar di iPhone Safari (`src/ui/noZoom.ts`)
+
+Safari mengabaikan `user-scalable=no`, jadi game dulu bisa ikut ter-zoom dan tertahan. Pengamannya:
+- Panel yang bisa di-scroll (`.screen`, `.menu-card`, `#boardList`) memakai `touch-action: pan-y` (scroll saja, tanpa pinch dan ketuk dua kali). `html/body` tetap `none`.
+- Semua kolom teks minimal 16 px (Safari zoom otomatis ke kolom yang lebih kecil), plus `text-size-adjust: 100%`.
+- Event `gesturestart/change/end`, gerakan dua jari, dan ketukan kedua dalam 350 ms (di luar kolom teks) dibatalkan; tombol tetap menerima klik.
+- Setelah keyboard tertutup halaman di-scroll balik ke (0,0).
+- Ukuran 3D memakai `documentElement.clientWidth/Height` (`layoutSize()`), bukan `innerWidth/innerHeight` yang menyusut saat zoom/keyboard; diukur ulang saat `orientationchange` dan `visualViewport` resize (lagi 300 ms kemudian).
 
 ## Web app (PWA)
 

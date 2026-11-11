@@ -2,7 +2,7 @@
 
 Dibaca otomatis di setiap sesi baru. **Isi file ini lebih baru daripada skill `dont-take-my-seat-dev`**. Kalau keduanya bertentangan, ikuti file ini dan `docs/ARCHITECTURE.md`.
 
-Terakhir diperbarui: 11 November 2026, versi **0.15.0**, protokol **v9**.
+Terakhir diperbarui: 11 November 2026, versi **0.16.0**, protokol **v9**.
 
 ## Pengguna
 
@@ -32,7 +32,8 @@ Terakhir diperbarui: 11 November 2026, versi **0.15.0**, protokol **v9**.
 - **Item di lantai, 1–3 per stop** (`POWER_UP_KINDS`): `earphones` (kebal dorong 4 dtk), `sleep` (aman sekali di kursi prioritas), `coffee` (es kopi, 1,4× cepat 5 dtk), `mbg` (ompreng MBG basi: hijau dan lambat 5 dtk, membatalkan kopi).
 - **Poin**: +10 per stasiun duduk, +5 per tendangan, +50 menang. Game berikutnya mulai sendiri 8 detik setelah game over; poin terbawa.
 - **Papan peringkat** lewat Worker `/scores` (`src/net/leaderboard.ts`).
-- Karakter chibi bulat, animasi tendang, bintang pusing. Tips sekali tampil (`src/ui/tips.ts`). Pengaturan kontrol lengkap (ukuran tombol, posisi analog, getar). Indikator ping, panel `?debug`.
+- Karakter chibi bulat, animasi tendang, bintang pusing. **Tips nyala secara default di setiap game** (`src/ui/tips.ts`, pengaturan Tips Nyala/Mati).
+- Anti-zoom iPhone Safari (`src/ui/noZoom.ts`, lihat ARCHITECTURE): jangan hapus `touch-action: pan-y` di panel scroll, dan kolom teks baru minimal 16 px. Pengaturan kontrol lengkap (ukuran tombol, posisi analog, getar). Indikator ping, panel `?debug`.
 - Host tetap berjalan saat di latar belakang (timer Web Worker) dan mengejar waktu di perangkat lambat (maks 0,25 dtk per frame).
 
 ## Aturan yang tetap berlaku
@@ -67,5 +68,6 @@ Cek browser dengan Playwright sesuai skill (viewport 844×390, `?signal=local` u
 - 9 Nov: jadi PWA, APK dihapus, relay Nostr, TURN.
 - 10 Nov (v0.8–v0.14): Worker + TURN, gabung lagi, perbaikan pemain tersangkut, stasiun Bogor asli, adu tendang, lantai becek, poin, kursi makin sedikit, es kopi, tips, karakter chibi, papan peringkat, rush hour, kursi prioritas pindah, petugas.
 - 11 Nov (v0.15.0): rush hour lebih padat, ompreng MBG basi, 1–3 item acak per stop.
+- 11 Nov (v0.16.0): perbaikan zoom di Safari iPhone, tips wajib muncul secara default (bisa dimatikan).
 
 Saat sesi selesai, perbarui bagian **Gameplay saat ini**, **Pekerjaan terbuka**, dan **Riwayat singkat** di file ini.
