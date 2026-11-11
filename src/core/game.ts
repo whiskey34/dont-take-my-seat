@@ -163,7 +163,11 @@ function advancePhase(s: GameState, events: GameEvent[]): void {
       setPhase(s, 'result', PH.result, events);
       break;
     case 'result':
-      if (alivePlayers(s).length <= 1) {
+      if (alivePlayers(s).length === 0) {
+        // Everyone was taken off by officers: nobody wins, start over.
+        restartGame(s, events);
+        setPhase(s, 'intro', PH.intro, events);
+      } else if (alivePlayers(s).length <= 1) {
         const winner = alivePlayers(s)[0];
         if (winner) {
           s.winnerId = winner.id;
@@ -327,6 +331,8 @@ function allFreeSeatsTaken(s: GameState): boolean {
 function resolveRound(s: GameState, events: GameEvent[]): void {
   const alive = alivePlayers(s);
   const safe = (p: Player) => p.seatId !== null && p.kickAt === null;
+  // Everyone already taken off by officers: `result` starts the game over.
+  if (alive.length === 0) return;
   const losers = alive.filter((p) => !safe(p));
   if (losers.length === alive.length) {
     events.push({ type: 'replay' });
@@ -343,6 +349,48 @@ function resolveRound(s: GameState, events: GameEvent[]): void {
   }
   if (losers.length > 0) events.push({ type: 'eliminated', playerIds: losers.map((p) => p.id) });
   for (const p of alive) if (!p.eliminated) addPoints(p, CONFIG.points.round, 'round', events);
+}
+
+/**
+ * Everyone got taken off the train: same route, back to the first station,
+ * everyone back in, and each player loses `CONFIG.points.allCaught` (never below 0).
+ */
+function restartGame(s: GameState, events: GameEvent[]): void {
+  const penalty = CONFIG.points.allCaught;
+  for (const p of s.players) {
+    const lost = Math.min(p.score, penalty);
+    if (lost > 0) addPoints(p, -lost, 'penalty', events);
+    p.vel = { x: 0, z: 0 };
+    p.seatId = null;
+    p.eliminated = false;
+    p.eliminatedInRound = null;
+    p.stunnedUntil = 0;
+    p.pushReadyAt = 0;
+    p.kickAt = null;
+    p.shieldUntil = 0;
+    p.sleeping = false;
+    p.boostUntil = 0;
+    p.sickUntil = 0;
+    p.slipUntil = 0;
+    p.npcStrikes = 0;
+  }
+  s.round = 0;
+  s.station = s.route[0]!;
+  s.winnerId = null;
+  s.seats = createSeats();
+  s.freeSeatIds = [];
+  s.trapSeatId = null;
+  s.seatMove = null;
+  s.rushHours = 0;
+  s.challenge = null;
+  s.brakeAt = null;
+  s.brakeUntil = 0;
+  s.doorSide = 0;
+  s.standers = [];
+  s.powerUps = [];
+  s.puddles = [];
+  placeStandingPlayers(s);
+  events.push({ type: 'restart', penalty });
 }
 
 function addPoints(p: Player, amount: number, reason: 'round' | 'win' | 'kick' | 'penalty', events: GameEvent[]): void {

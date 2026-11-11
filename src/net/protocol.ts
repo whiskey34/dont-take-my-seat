@@ -1,7 +1,7 @@
 import { ALL_CHALLENGES, POWER_UP_KINDS, type ChallengeKind, type GameEvent, type GameState, type Phase, type Player, type PlayerSetup, type PowerUpKind, type Seat } from '../core/types';
 
 /** Bump when messages change incompatibly; peers with another version are refused. */
-export const PROTOCOL_VERSION = 10;
+export const PROTOCOL_VERSION = 11;
 export const MAX_NAME = 14;
 
 export interface LobbyPlayer {
@@ -297,6 +297,8 @@ function isEvent(e: unknown): e is GameEvent {
       return Array.isArray(e.playerIds) && e.playerIds.every((x) => isStr(x));
     case 'replay':
       return true;
+    case 'restart':
+      return isInt(e.penalty);
     case 'winner':
     case 'shielded':
       return isStr(e.playerId);

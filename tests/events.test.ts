@@ -190,6 +190,36 @@ describe('kicking seated passengers', () => {
     expect(alivePlayers(s)).toHaveLength(3);
   });
 
+  it('everyone taken off: the game starts over at the first station, everyone loses points', () => {
+    const { s, seatId } = besideNpc();
+    const [a, ...rest] = s.players;
+    // The other three were already taken off this game.
+    for (const p of rest) {
+      p.eliminated = true;
+      p.eliminatedInRound = s.round;
+      p.npcStrikes = 2;
+    }
+    a!.npcStrikes = 1;
+    s.players.forEach((p, i) => (p.score = [80, 30, 0, 120][i]!));
+    s.round = 3;
+    s.station = s.route[3]!;
+    const ev = [...step(s, new Map([['a', press]]), DT)];
+    expect(ev).toContainEqual({ type: 'escorted', playerId: 'a', seatId });
+    expect(alivePlayers(s)).toHaveLength(0);
+    ev.push(...runUntil(s, (x) => x.phase === 'intro'));
+    expect(ev).toContainEqual({ type: 'restart', penalty: CONFIG.points.allCaught });
+    expect(ev.some((e) => e.type === 'replay' || e.type === 'winner')).toBe(false);
+    expect(s.round).toBe(0);
+    expect(s.station).toBe(s.route[0]);
+    expect(s.winnerId).toBeNull();
+    expect(alivePlayers(s)).toHaveLength(4);
+    expect(s.players.every((p) => p.npcStrikes === 0 && p.seatId === null)).toBe(true);
+    expect(s.players.map((p) => p.score)).toEqual([30, 0, 0, 70]); // −50, never below 0
+    // And it plays on normally.
+    runUntil(s, (x) => x.phase === 'scramble');
+    expect(s.round).toBe(0);
+  });
+
   it('strikes start again in the next game', () => {
     const next = createGame([{ id: 'a', name: 'a', isBot: false, score: 40 }, ...four.slice(1)], 5);
     expect(next.players[0]!.npcStrikes).toBe(0);
@@ -228,6 +258,7 @@ describe('network', () => {
       { type: 'seatMoved', seatIds: [1] },
       { type: 'points', playerId: 'a', amount: -20, reason: 'penalty' },
       { type: 'challenge', kind: 'rushHour' },
+      { type: 'restart', penalty: 50 },
     ];
     expect(parseHostMsg(JSON.stringify({ t: 'ev', e: events }))).toEqual({ t: 'ev', e: events });
   });

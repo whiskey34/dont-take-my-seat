@@ -207,6 +207,9 @@ export class Hud {
         case 'replay':
           this.flash(t('replay'), 'plain', 2000);
           break;
+        case 'restart':
+          this.flash(t('allCaught', { n: e.penalty }), 'bad', 3200);
+          break;
         default:
           break;
       }

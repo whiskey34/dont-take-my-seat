@@ -131,6 +131,8 @@ export type GameEvent =
   | { type: 'kicked'; playerId: PlayerId; seatId: number }
   | { type: 'eliminated'; playerIds: PlayerId[] }
   | { type: 'replay' }
+  /** Everyone was taken off the train: the game starts over from the first station. */
+  | { type: 'restart'; penalty: number }
   | { type: 'winner'; playerId: PlayerId }
   | { type: 'challenge'; kind: ChallengeKind }
   | { type: 'suddenBrake' }

@@ -35,6 +35,7 @@ export const en = {
   kicked: 'Priority seat! Please stand.',
   youAreOut: 'No seat. You are out!',
   outOthers: '{names} out',
+  allCaught: 'Everyone was taken off the train! Starting over, −{n} points',
   replay: 'Nobody sat down. This stop again!',
   spectating: 'Spectating',
   menu: 'Menu',

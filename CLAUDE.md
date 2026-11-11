@@ -2,7 +2,7 @@
 
 Dibaca otomatis di setiap sesi baru. **Isi file ini lebih baru daripada skill `dont-take-my-seat-dev`**. Kalau keduanya bertentangan, ikuti file ini dan `docs/ARCHITECTURE.md`.
 
-Terakhir diperbarui: 11 November 2026, versi **0.18.1**, protokol **v10**.
+Terakhir diperbarui: 11 November 2026, versi **0.19.0**, protokol **v11**.
 
 ## Pengguna
 
@@ -18,18 +18,18 @@ Terakhir diperbarui: 11 November 2026, versi **0.18.1**, protokol **v10**.
 | Signaling hanya MQTT | **Cloudflare Worker** (`worker/`, WebSocket `/room/<topik>`, Durable Object) + MQTT + Nostr bersamaan (`src/net/signal/roomSignaling.ts`, `relayLink.ts` menyambung ulang sendiri) |
 | Belum ada TURN | **Cloudflare TURN** dari Worker `/turn` (`src/net/rtc/ice.ts`). URL Worker lewat variabel repo `SIGNAL_URL` → `VITE_SIGNAL_URL`, atau `?worker=URL` |
 | Pemain terputus diganti bot | **Room tanpa bot.** Pemain terputus tetap diam ("Terputus") dan bisa **Gabung lagi** dengan `playerKey` (`src/net/playerKey.ts`). Min 2 pemain |
-| `PROTOCOL_VERSION` 2 | **10** (`src/net/protocol.ts`) |
+| `PROTOCOL_VERSION` 2 | **11** (`src/net/protocol.ts`) |
 | Host keluar = room selesai | **Host pindah** ke pemain berikutnya dengan kode room yang sama (lihat ARCHITECTURE, *Keluar dan bergabung lagi*) |
 | 3 challenge, 2 power-up | Lihat daftar di bawah |
 
-## Gameplay saat ini (v0.18.1)
+## Gameplay saat ini (v0.19.0)
 
 - Perjalanan nyata Commuter Line Bogor (+ cabang Nambo), 8 stasiun acak per game (`pickRoute`, `BOGOR_LINE`, `NAMBO_BRANCH` di `config.ts`).
 - Kursi makin sedikit (`CONFIG.seats`): stop 1–2 lebih banyak dari pemain, stop 3–4 kurang satu, stop 5+ kurang dua, stasiun terakhir cuma 1 kursi.
 - Tombol aksi kontekstual: DUDUK / TENDANG / DORONG.
 - **Challenge harian** (`CHALLENGE_KINDS`): `suddenBrake`, `crowd`, `oneSideDoors`, `kickFight` (tendang pemain yang duduk), `puddles` (lantai becek, terpeleset).
 - **Event spesial**: `rushHour` (25% per stop selain pertama/terakhir, maks 2 per game, 22 penumpang berdiri, +4 detik); **kursi prioritas pindah** (30%, berkedip merah dulu, +3 detik).
-- **Menendang penumpang NPC yang duduk**: pertama −20 poin, kedua kali petugas KRL membawamu keluar (gugur). Ada model petugas, animasi, peluit.
+- **Menendang penumpang NPC yang duduk**: pertama −20 poin, kedua kali petugas KRL membawamu keluar (gugur). Ada model petugas, animasi, peluit. **Kalau semua pemain dibawa petugas**: game langsung mulai lagi dari stasiun pertama (rute sama) dan tiap pemain −50 poin (`CONFIG.points.allCaught`, tidak di bawah 0).
 - **Item di lantai, 1–3 per stop** (`POWER_UP_KINDS`): `earphones` (kebal dorong 4 dtk), `sleep` (aman sekali di kursi prioritas), `coffee` (es kopi, 1,4× cepat 5 dtk), `mbg` (ompreng MBG basi: hijau dan lambat 5 dtk, membatalkan kopi).
 - **Poin**: +10 per stasiun duduk, +5 per tendangan, +50 menang. Game selesai saat tinggal 1 pemain → **popup juara** (daftar, Juara 1 paling atas dengan medali 🥇🥈🥉, tanpa podium; confetti) dengan tombol **Lanjutkan**/**Keluar**, tanpa timer (di room hanya host yang melanjutkan); poin terbawa.
 - **Papan peringkat** lewat Worker `/scores` (`src/net/leaderboard.ts`).
@@ -62,6 +62,7 @@ Cek browser dengan Playwright sesuai skill (viewport 844×390, `?signal=local` u
 - PR Dependabot (bump typescript, vite, vitest) **gagal di CI dan Security** per 10 Nov; perlu dicek dan diperbaiki atau ditutup.
 - Integrasi chat app pengguna (Kotlin + Capacitor/Ionic) masih menunggu akses kodenya; SDK siap di `messenger-sdk/`. Repo `whiskey34/chat-app` BUKAN chat app itu.
 - Host pindah: game yang sedang berjalan belum dilanjutkan di host baru (semua kembali ke lobby). Bisa dikembangkan dengan mengirim state lengkap ke pengganti.
+- Lag P2P: usulan bertahap: (1) ukur di `?debug` (ukuran snapshot, upload host, TURN atau tidak), (2) snapshot biner + delta, (3) server game di Durable Object (simulasi `src/core` di server, P2P tetap sebagai cadangan). Menunggu keputusan pengguna.
 - Ide yang belum dibuat: mode QR tanpa internet, gabung otomatis dari tautan `?join=KODE`, kursi palsu (tas), NPC ikut berebut, kursi diumumkan telat, Manggarai chaos.
 - Keseimbangan: rata-rata game ~25–30 detik, bot jangan terlalu cepat. Setelah ubah gameplay, jalankan simulasi 200 game bot (selalu satu pemenang, tanpa kursi ganda).
 
@@ -75,5 +76,6 @@ Cek browser dengan Playwright sesuai skill (viewport 844×390, `?signal=local` u
 - 11 Nov (v0.17.0): host pindah otomatis ke pemain berikutnya, room kosong bisa dibuka lagi lewat Gabung lagi, tips kembali sekali di awal (tetap default nyala).
 - 11 Nov (v0.18.0): popup juara dengan confetti, tombol Lanjutkan tanpa hitung mundur otomatis.
 - 11 Nov (v0.18.1): podium diganti daftar (Juara 1 paling atas).
+- 11 Nov (v0.19.0): semua pemain tertangkap petugas → tidak freeze lagi, game mulai dari awal dengan −50 poin. (Dibahas juga: server game di Durable Object untuk mengurangi lag P2P; belum dikerjakan, menunggu keputusan pengguna soal jumlah pemain dan paket berbayar Cloudflare.)
 
 Saat sesi selesai, perbarui bagian **Gameplay saat ini**, **Pekerjaan terbuka**, dan **Riwayat singkat** di file ini.

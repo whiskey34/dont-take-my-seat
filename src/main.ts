@@ -345,7 +345,7 @@ class App {
       if (e.type === 'slipped' && e.playerId === me) this.buzz([20, 20, 60]);
       if (e.type === 'kicked' && e.playerId === me) play('kick');
       if (e.type === 'suddenBrake') play('brake');
-      if (e.type === 'npcKick' || e.type === 'escorted') play('whistle');
+      if (e.type === 'npcKick' || e.type === 'escorted' || e.type === 'restart') play('whistle');
       if (e.type === 'npcKick' && e.playerId === me) this.buzz([60, 40, 60]);
       if (e.type === 'escorted' && e.playerId === me) play('out');
       if (e.type === 'seatMoveWarn') play('tick');

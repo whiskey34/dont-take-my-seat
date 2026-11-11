@@ -37,6 +37,7 @@ export const id: Strings = {
   kicked: 'Kursi prioritas! Silakan berdiri.',
   youAreOut: 'Tidak dapat kursi. Kamu gugur!',
   outOthers: '{names} gugur',
+  allCaught: 'Semua penumpang dibawa petugas! Mulai lagi dari awal, −{n} poin',
   replay: 'Tidak ada yang duduk. Ulangi stasiun ini!',
   spectating: 'Menonton',
   menu: 'Menu',

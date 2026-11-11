@@ -89,6 +89,7 @@ export const CONFIG = {
     round: 10, // seated when the doors close
     win: 50,
     kick: 5, // kicked someone off a seat
+    allCaught: 50, // everyone taken off by officers: the game starts over and each player loses this
   },
 
   powerUp: {
