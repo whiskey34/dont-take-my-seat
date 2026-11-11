@@ -30,6 +30,12 @@ export interface ClientCallbacks {
 /** Connection to a host, from the lobby through any number of games. */
 export class ClientNet {
   private myId: string | null = null;
+  /** The host closed the room on purpose (not a dropped link, not replaced by our own new connection). */
+  hostClosed = false;
+  /** The player the host named to take over when it closed the room. */
+  private named: string | null = null;
+  /** The latest lobby list from the host (host first). */
+  private lobbyList: LobbyPlayer[] = [];
   private session: ClientSession | null = null;
   private done = false;
   private inputSeq = 0;
@@ -75,6 +81,16 @@ export class ClientNet {
     return this.myId;
   }
 
+  /**
+   * Who becomes host now that the host is gone: the one it named when closing
+   * the room, otherwise the next player in the lobby order who is still connected.
+   */
+  nextHost(): LobbyPlayer | null {
+    const off = this.session?.offline() ?? new Set<string>();
+    if (this.named) return this.lobbyList.find((p) => p.id === this.named) ?? { id: this.named, name: '' };
+    return this.lobbyList.find((p) => p.id !== this.hostId && !off.has(p.id)) ?? null;
+  }
+
   /** Round-trip time to the host (ms); null if unknown. Undefined if this connection cannot measure it. */
   rtt(): Promise<number | null> | undefined {
     if (!this.transport.rtt) return undefined;
@@ -115,6 +131,7 @@ export class ClientNet {
         this.finish(msg.reason);
         break;
       case 'lobby':
+        this.lobbyList = msg.players;
         this.cb.lobby(msg.players);
         break;
       case 'start':
@@ -135,6 +152,10 @@ export class ClientNet {
         this.session?.receiveEvents(msg.e);
         break;
       case 'bye':
+        if (msg.reason === 'closed') {
+          this.hostClosed = true;
+          this.named = msg.next ?? null;
+        }
         this.finish('hostLeft');
         break;
     }

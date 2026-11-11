@@ -1,7 +1,7 @@
 import { ALL_CHALLENGES, POWER_UP_KINDS, type ChallengeKind, type GameEvent, type GameState, type Phase, type Player, type PlayerSetup, type PowerUpKind, type Seat } from '../core/types';
 
 /** Bump when messages change incompatibly; peers with another version are refused. */
-export const PROTOCOL_VERSION = 9;
+export const PROTOCOL_VERSION = 10;
 export const MAX_NAME = 14;
 
 export interface LobbyPlayer {
@@ -25,7 +25,8 @@ export type HostMsg =
   | { t: 'start'; seed: number; players: PlayerSetup[]; difficulty: 'easy' | 'normal' }
   | { t: 'snap'; s: Snapshot }
   | { t: 'ev'; e: GameEvent[] }
-  | { t: 'bye'; reason: 'left' | 'closed' };
+  /** `next`: when the host closes the room, the player id who takes over as host. */
+  | { t: 'bye'; reason: 'left' | 'closed'; next?: string };
 
 export type RejectReason = 'full' | 'started' | 'version';
 
@@ -245,7 +246,8 @@ export function parseHostMsg(data: string): HostMsg | null {
     case 'ev':
       return Array.isArray(m.e) && m.e.every(isEvent) ? { t: 'ev', e: m.e } : null;
     case 'bye':
-      return { t: 'bye', reason: m.reason === 'closed' ? 'closed' : 'left' };
+      if (m.reason !== 'closed') return { t: 'bye', reason: 'left' };
+      return isStr(m.next) && m.next ? { t: 'bye', reason: 'closed', next: m.next } : { t: 'bye', reason: 'closed' };
     default:
       return null;
   }

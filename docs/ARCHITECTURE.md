@@ -70,7 +70,10 @@ RtcHost/JoinTransport          MessengerTransport
 - Menu menampilkan tombol **Gabung lagi ke room KODE** selama 30 menit setelah bergabung dengan kode room. Tombol ini hilang kalau room ditutup atau menolak.
 - Pemain yang sudah keluar saat host memulai game berikutnya tidak diikutkan. Room tidak memakai bot: minimal 2 pemain, tempat kosong dibiarkan kosong; kalau host tinggal sendiri setelah game, host kembali ke lobby.
 - **Nomor input** (`ClientNet.inputSeq`) terus naik selama koneksi, tidak diulang dari 1 di setiap game. Dulu nomor diulang, sementara input terakhir dari game sebelumnya (bernomor tinggi) masih dalam perjalanan saat game baru dimulai; host lalu menganggap semua input baru "lama" dan mengabaikannya, sehingga pemain tersangkut di posisi awal (terlihat di panel debug sebagai `sent #266 ack #1678`). Sebagai pengaman, host juga mengikuti nomor yang tiba-tiba jauh lebih kecil (selisih lebih dari 600).
-- Host tidak bisa digantikan: kalau host keluar, room berakhir untuk semua pemain.
+- **Host pindah** (protokol **v10**): saat host keluar, pesan `bye` membawa `next`, yaitu pemain berikutnya yang masih tersambung (`HostNet.successor`). Pemain itu membuka room dengan **kode yang sama** sebagai host (`takeOver`) dan melihat notifikasi 👑 di lobby. Pemain lain bergabung ke kode yang sama (`followNewHost`) dan melihat siapa host barunya. Game yang sedang berjalan berakhir (state-nya ada di host lama); poin dibawa ke game pertama host baru berdasarkan nama (`carryScores`).
+- **HP host mati** (tanpa `bye`): semua pemain menyambung ulang seperti biasa. Pemain berikutnya di urutan lobby yang masih online (`ClientNet.nextHost()`) hanya menunggu 8 detik (`TAKEOVER_MS`), lalu mengambil alih; yang lain ikut masuk ke lobby host baru saat menyambung ulang.
+- **Gabung lagi ke room kosong**: tombol *Gabung lagi* menunggu host 10 detik (`EMPTY_ROOM_MS`); kalau tidak ada yang menjawab, room dibuka lagi dengan kode yang sama dan kamu jadi host. Host juga menyimpan kodenya di `lastRoom`, jadi bisa kembali lewat tombol yang sama.
+- Mode chat app tidak memakai perpindahan ini (chat app yang menentukan host).
 
 ## Alur satu ronde
 
@@ -116,10 +119,10 @@ intro → riding (kereta jalan, goyang, lalu mengerem)
 
 ## Tips (`src/ui/tips.ts`)
 
-- **Nyala secara default, di setiap game.** Pertama kali dalam satu game sebuah item (es kopi, earphone, pura-pura tidur), challenge, atau aturan (kursi prioritas, kursi cukup untuk semua, kursi makin sedikit, stasiun terakhir) muncul, tampil penjelasan singkat yang menunjuk ke benda itu (lingkaran sorotan).
+- **Nyala secara default, tiap tips sekali per perangkat.** Pertama kali sebuah item (es kopi, earphone, pura-pura tidur), challenge, atau aturan (kursi prioritas, kursi cukup untuk semua, kursi makin sedikit, stasiun terakhir) muncul, tampil penjelasan singkat yang menunjuk ke benda itu (lingkaran sorotan).
 - **Lawan bot:** game dijeda diam-diam (simulasi tidak maju, tanpa label) dan muncul kartu krem dengan tombol *Oke, mengerti!* (Enter/Spasi juga bisa). Kalau ada beberapa tips sekaligus, tampil bergantian.
 - **Multiplayer / chat app:** tidak bisa dijeda, jadi tampil gelembung kecil yang hilang sendiri setelah 2 detik.
-- Tiap tips tampil sekali per game (`pending` dikosongkan saat game baru). Pengaturan **Tips** (Nyala/Mati, `settings.tips`, default Nyala) mematikannya. `tipsSeen` dari versi lama diabaikan.
+- Tips yang sudah tampil disimpan di `settings.tipsDone`, jadi hanya muncul di awal. Pengaturan **Tips** (Nyala/Mati, default Nyala) mematikan semuanya; tombol *Tampilkan tips lagi* mengulangnya. (`tipsSeen` versi ≤0.15 diabaikan, jadi semua pemain melihat tips sekali lagi.)
 
 ## Layar di iPhone Safari (`src/ui/noZoom.ts`)
 

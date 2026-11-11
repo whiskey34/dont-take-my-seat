@@ -33,6 +33,10 @@ const HUMAN = 'you';
 /** Seconds on the game-over screen before the next game starts by itself. */
 const NEXT_GAME_DELAY_S = 8;
 const REJOIN_WINDOW_MS = 30 * 60 * 1000;
+/** "Rejoin": nobody answering in the room for this long means it is empty; we reopen it as host. */
+const EMPTY_ROOM_MS = 10_000;
+/** Next in line after the host's link dropped: how long to wait for it before taking over. */
+const TAKEOVER_MS = 8_000;
 
 type Mode = 'menu' | 'lobby' | 'playing' | 'paused' | 'over';
 type Screen = 'menu' | 'howto' | 'pause' | 'gameover' | 'settingsScreen' | 'joinScreen' | 'lobby' | 'boardScreen';
@@ -70,6 +74,10 @@ class App {
   private reconnecting = false;
   private resumeAfterOver = false;
   private attempt: symbol | null = null;
+  /** Room code to open ourselves as host if nobody answers there (empty room, or we are next in line). */
+  private hostFallback: string | null = null;
+  /** Points by player name, carried to the first game under a new host. */
+  private carryScores: Map<string, number> | null = null;
   private width = 1;
   private height = 1;
   private seed = (Date.now() & 0x7fffffff) | 1;
@@ -106,8 +114,14 @@ class App {
     this.startDemo();
     requestAnimationFrame(this.frame);
     this.startBackgroundTicker();
+    const tipsDone = new Set(this.settings.tipsDone);
     this.tips = new Tips(
       () => this.settings.tips,
+      tipsDone,
+      () => {
+        this.settings.tipsDone = [...tipsDone];
+        saveSettings(this.settings);
+      },
       this.scene,
       () => ({ width: this.width, height: this.height }),
     );
@@ -349,12 +363,16 @@ class App {
 
   // ---------------------------------------------------------------- multiplayer
 
-  private async createRoom(): Promise<void> {
+  /** Opens a room as host: a new code, or an existing one (taking over, or reopening an empty room). */
+  private async createRoom(existing?: string, note = ''): Promise<void> {
     if (!('RTCPeerConnection' in window)) return this.notice(t('errNoRtc'));
     void getIceServers(); // fetch TURN credentials while the lobby opens
-    const code = newRoomCode(cryptoRandom);
+    const code = existing ?? newRoomCode(cryptoRandom);
+    // The host can come back with "Rejoin" too (as a player, or reopening it if it is empty).
+    this.settings.lastRoom = { code, at: Date.now() };
+    saveSettings(this.settings);
     const signaling = makeSignaling(code);
-    this.openLobby({ code, isHost: true, status: t('creatingRoom') });
+    this.openLobby({ code, isHost: true, status: t('creatingRoom'), note });
     try {
       await signaling.ready;
     } catch {
@@ -372,7 +390,8 @@ class App {
     this.renderLobby(host.players);
   }
 
-  private async joinRoom(raw: string): Promise<void> {
+  /** `orHost`: "Rejoin" opens the room ourselves if nobody is there any more. */
+  private async joinRoom(raw: string, orHost = false): Promise<void> {
     void getIceServers();
     const code = normalizeCode(raw);
     if (!code) {
@@ -388,14 +407,15 @@ class App {
     this.settings.lastRoom = { code, at: Date.now() };
     saveSettings(this.settings);
     this.openLobby({ code, isHost: false, status: t('connecting') });
-    await this.connectClient(code, (stage) => {
+    this.hostFallback = orHost ? code : null;
+    await this.connectClient(code, orHost ? EMPTY_ROOM_MS : undefined, (stage) => {
       if (this.mode !== 'lobby' || this.lobbyPlayers.length > 0) return;
       $('lobbyStatus').textContent = { searching: t('searchingRoom'), connecting: t('roomFound'), retrying: t('retryingRoom') }[stage];
     });
   }
 
   /** Finds the room by its code and connects to the host. */
-  private async connectClient(code: string, onStage: (stage: JoinStage) => void): Promise<void> {
+  private async connectClient(code: string, timeoutMs: number | undefined, onStage: (stage: JoinStage) => void): Promise<void> {
     const signaling = makeSignaling(code);
     const attempt = Symbol('attempt');
     this.attempt = attempt;
@@ -408,7 +428,7 @@ class App {
     }
     // Gave up or left while the relays were connecting.
     if (this.attempt !== attempt || (this.mode !== 'lobby' && !this.reconnecting)) return signaling.close();
-    const transport = new RtcJoinTransport(signaling, () => randomId('p'), (reason) => this.connectionClosed(reason), onStage);
+    const transport = new RtcJoinTransport(signaling, () => randomId('p'), (reason) => this.connectionClosed(reason), onStage, timeoutMs);
     const client = new ClientNet(transport, null, this.name, await this.playerKey, this.clientCallbacks());
     this.net = { kind: 'client', client, code, messenger: null };
   }
@@ -418,12 +438,43 @@ class App {
    * Stay on screen and quietly join again with the same player key; the host
    * puts us back on our character where it is now.
    */
-  private reconnect(code: string): void {
+  private reconnect(code: string, timeoutMs?: number): void {
     this.reconnecting = true;
     this.net = null;
     this.hud.notice(t('reconnecting'));
     if (this.mode === 'lobby') $('lobbyStatus').textContent = t('reconnecting');
-    void this.connectClient(code, () => {});
+    void this.connectClient(code, timeoutMs, () => {});
+  }
+
+  /** The host left and we are next in line: reopen the same room code with us as host. */
+  private takeOver(code: string, note: string): void {
+    const view = this.mode === 'playing' || this.mode === 'paused' || this.mode === 'over' ? this.session.view() : null;
+    this.carryScores = view ? new Map(view.players.map((p) => [p.name, p.score])) : null;
+    window.clearInterval(this.nextGameTimer);
+    this.tips.clear();
+    this.reconnecting = false;
+    this.resumeAfterOver = false;
+    this.attempt = null;
+    this.hostFallback = null;
+    this.hud.notice('');
+    this.net = null;
+    this.buzz([40, 60, 40]);
+    void this.createRoom(code, note);
+  }
+
+  /** The host left and someone else takes over: wait for them in the lobby of the same room. */
+  private followNewHost(code: string, name: string): void {
+    window.clearInterval(this.nextGameTimer);
+    this.tips.clear();
+    this.reconnecting = false;
+    this.resumeAfterOver = false;
+    this.hostFallback = null;
+    this.hud.notice('');
+    this.net = null;
+    this.settings.lastRoom = { code, at: Date.now() };
+    saveSettings(this.settings);
+    this.openLobby({ code, isHost: false, status: t('connecting'), note: name ? t('newHost', { name }) : t('hostMoving') });
+    void this.connectClient(code, undefined, () => {});
   }
 
   /** Launched inside the messenger: the chat decides who plays and who hosts. */
@@ -456,6 +507,17 @@ class App {
   private clientCallbacks() {
     return {
       lobby: (p: LobbyPlayer[]) => {
+        this.hostFallback = null;
+        if (this.reconnecting && this.mode !== 'lobby') {
+          // We were reconnecting from a game, but the room now has a new host
+          // (the old one is gone): its lobby is where everyone meets again.
+          this.reconnecting = false;
+          this.hud.notice('');
+          window.clearInterval(this.nextGameTimer);
+          this.tips.clear();
+          const code = this.net?.code ?? null;
+          this.openLobby({ code, isHost: false, status: '', note: p[0] ? t('newHost', { name: p[0].name }) : '' });
+        }
         if (this.reconnecting && this.mode === 'lobby') this.reconnecting = false;
         this.renderLobby(p);
       },
@@ -465,6 +527,7 @@ class App {
   }
 
   private clientStarted(s: GameSession): void {
+    this.hostFallback = null;
     if (!this.reconnecting) return this.beginGame(s);
     this.reconnecting = false;
     this.hud.notice('');
@@ -480,8 +543,29 @@ class App {
   private connectionClosed(reason: CloseReason, message?: string): void {
     const code = this.net?.kind === 'client' && !this.net.messenger ? this.net.code : this.reconnecting ? this.settings.lastRoom?.code ?? null : null;
     const inRoom = this.mode === 'playing' || this.mode === 'paused' || this.mode === 'over' || this.mode === 'lobby';
+    // Nobody answered in a room we may open ourselves: an empty room ("Rejoin"),
+    // or the host vanished and we are next in line.
+    if (reason === 'timeout' && code && this.hostFallback === code && inRoom) {
+      return this.takeOver(code, this.mode === 'lobby' && !this.reconnecting ? t('roomReopened') : t('youAreHost'));
+    }
+    const client = this.net?.kind === 'client' && !this.net.messenger ? this.net.client : null;
+    if (client && code && inRoom && !this.reconnecting && (reason === 'hostLeft' || reason === 'lost')) {
+      const next = client.nextHost();
+      const meNext = next !== null && next.id === client.id;
+      if (reason === 'hostLeft' && client.hostClosed) {
+        // The host closed the room: the next player takes over, everyone else follows.
+        return meNext || !next ? this.takeOver(code, t('youAreHost')) : this.followNewHost(code, next.name);
+      }
+      if (reason === 'lost') {
+        // A dropped link: try again without leaving the game. If we are next in
+        // line and the host does not answer for a while, it is gone: take over.
+        this.hostFallback = meNext ? code : null;
+        return this.reconnect(code, meNext ? TAKEOVER_MS : undefined);
+      }
+    }
     // A dropped link (not the host leaving): try again without leaving the game.
     if (reason === 'lost' && code && inRoom && !this.reconnecting) return this.reconnect(code);
+    this.hostFallback = null;
     this.reconnecting = false;
     this.resumeAfterOver = false;
     this.attempt = null;
@@ -514,7 +598,7 @@ class App {
     if (net?.kind === 'client') net.client.leave();
   }
 
-  private openLobby(o: { code: string | null; isHost: boolean; status: string }): void {
+  private openLobby(o: { code: string | null; isHost: boolean; status: string; note?: string }): void {
     this.mode = 'lobby';
     this.relayUp = () => true;
     $<HTMLInputElement>('inpLobbyName').value = this.name;
@@ -530,6 +614,8 @@ class App {
     $<HTMLButtonElement>('btnLobbyStart').disabled = true;
     $('lobbyStatus').textContent = o.status;
     $('lobbyError').textContent = '';
+    $('lobbyNote').textContent = o.note ?? '';
+    $('lobbyNote').hidden = !o.note;
     this.renderLobby([]);
     this.show('lobby');
   }
@@ -585,6 +671,10 @@ class App {
     if (this.net?.kind !== 'host') return;
     const host = this.net.host;
     if (!host.canStart) return this.backToLobby();
+    const carry = this.carryScores;
+    this.carryScores = null;
+    if (carry && scores.size === 0) scores = new Map(host.players.map((p) => [p.id, carry.get(p.name) ?? 0]));
+    $('lobbyNote').hidden = true;
     this.beginGame(host.start(this.settings.difficulty, this.nextSeed(), scores));
   }
 
@@ -636,6 +726,8 @@ class App {
     this.reconnecting = false;
     this.resumeAfterOver = false;
     this.attempt = null;
+    this.hostFallback = null;
+    this.carryScores = null;
     this.hud.notice('');
     this.leaveNet();
     this.mode = 'menu';
@@ -845,7 +937,7 @@ class App {
       if (!last) return;
       this.notice('');
       $<HTMLInputElement>('inpJoinName').value = this.settings.name;
-      void this.joinRoom(last.code);
+      void this.joinRoom(last.code, true);
     });
     on('btnJoin', () => {
       this.notice('');
@@ -921,6 +1013,12 @@ class App {
     seg('segCtlMode', (v) => {
       this.settings.ctlMode = v === 'fixed' ? 'fixed' : 'floating';
       this.applyControlSettings();
+    });
+    on('btnTipsReset', () => {
+      this.tips.reset();
+      this.settings.tips = true;
+      this.save();
+      $('btnTipsReset').textContent = t('tipsReset');
     });
     seg('segTips', (v) => {
       this.settings.tips = v === 'on';

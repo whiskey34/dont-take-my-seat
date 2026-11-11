@@ -407,6 +407,36 @@ describe('host and clients', () => {
     expect(clients[1]!.rec.closed).toBe('hostLeft');
   });
 
+  it('names the next connected player as the new host when the host leaves', () => {
+    const { hub, host, clients } = setupRoom();
+    host.start('normal', 5);
+    hub.pump();
+    // A dropped out (still in the game, shown offline): B takes over.
+    clients[0]!.t.close();
+    for (let i = 0; i < 3; i++) hub.pump();
+    expect(host.successor).toBe('B');
+    host.close();
+    hub.pump();
+    hub.pump();
+    const b = clients[1]!;
+    expect(b.rec.closed).toBe('hostLeft');
+    expect(b.net.hostClosed).toBe(true);
+    expect(b.net.nextHost()?.id).toBe('B');
+    expect(b.net.nextHost()?.name).toBe('Player B');
+    expect(parseHostMsg(JSON.stringify({ t: 'bye', reason: 'closed', next: 7 }))).toEqual({ t: 'bye', reason: 'closed' });
+  });
+
+  it('without a goodbye, the next player in the lobby who is still online takes over', () => {
+    const { hub, hostT, clients } = setupRoom();
+    hostT.close(); // the host's phone died
+    hub.pump();
+    const [a, b] = clients;
+    expect(a!.rec.closed).toBe('lost');
+    expect(a!.net.hostClosed).toBe(false);
+    expect(a!.net.nextHost()?.id).toBe('A');
+    expect(b!.net.nextHost()?.id).toBe('A');
+  });
+
   it('reports a dropped link as "lost" (not the host leaving), and silence during a game too', () => {
     vi.useFakeTimers();
     try {

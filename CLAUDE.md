@@ -2,7 +2,7 @@
 
 Dibaca otomatis di setiap sesi baru. **Isi file ini lebih baru daripada skill `dont-take-my-seat-dev`**. Kalau keduanya bertentangan, ikuti file ini dan `docs/ARCHITECTURE.md`.
 
-Terakhir diperbarui: 11 November 2026, versi **0.16.0**, protokol **v9**.
+Terakhir diperbarui: 11 November 2026, versi **0.17.0**, protokol **v10**.
 
 ## Pengguna
 
@@ -18,10 +18,11 @@ Terakhir diperbarui: 11 November 2026, versi **0.16.0**, protokol **v9**.
 | Signaling hanya MQTT | **Cloudflare Worker** (`worker/`, WebSocket `/room/<topik>`, Durable Object) + MQTT + Nostr bersamaan (`src/net/signal/roomSignaling.ts`, `relayLink.ts` menyambung ulang sendiri) |
 | Belum ada TURN | **Cloudflare TURN** dari Worker `/turn` (`src/net/rtc/ice.ts`). URL Worker lewat variabel repo `SIGNAL_URL` → `VITE_SIGNAL_URL`, atau `?worker=URL` |
 | Pemain terputus diganti bot | **Room tanpa bot.** Pemain terputus tetap diam ("Terputus") dan bisa **Gabung lagi** dengan `playerKey` (`src/net/playerKey.ts`). Min 2 pemain |
-| `PROTOCOL_VERSION` 2 | **9** (`src/net/protocol.ts`) |
+| `PROTOCOL_VERSION` 2 | **10** (`src/net/protocol.ts`) |
+| Host keluar = room selesai | **Host pindah** ke pemain berikutnya dengan kode room yang sama (lihat ARCHITECTURE, *Keluar dan bergabung lagi*) |
 | 3 challenge, 2 power-up | Lihat daftar di bawah |
 
-## Gameplay saat ini (v0.15.0)
+## Gameplay saat ini (v0.17.0)
 
 - Perjalanan nyata Commuter Line Bogor (+ cabang Nambo), 8 stasiun acak per game (`pickRoute`, `BOGOR_LINE`, `NAMBO_BRANCH` di `config.ts`).
 - Kursi makin sedikit (`CONFIG.seats`): stop 1–2 lebih banyak dari pemain, stop 3–4 kurang satu, stop 5+ kurang dua, stasiun terakhir cuma 1 kursi.
@@ -32,7 +33,8 @@ Terakhir diperbarui: 11 November 2026, versi **0.16.0**, protokol **v9**.
 - **Item di lantai, 1–3 per stop** (`POWER_UP_KINDS`): `earphones` (kebal dorong 4 dtk), `sleep` (aman sekali di kursi prioritas), `coffee` (es kopi, 1,4× cepat 5 dtk), `mbg` (ompreng MBG basi: hijau dan lambat 5 dtk, membatalkan kopi).
 - **Poin**: +10 per stasiun duduk, +5 per tendangan, +50 menang. Game berikutnya mulai sendiri 8 detik setelah game over; poin terbawa.
 - **Papan peringkat** lewat Worker `/scores` (`src/net/leaderboard.ts`).
-- Karakter chibi bulat, animasi tendang, bintang pusing. **Tips nyala secara default di setiap game** (`src/ui/tips.ts`, pengaturan Tips Nyala/Mati).
+- **Host keluar → pemain berikutnya jadi host** (notifikasi 👑, kode sama, poin terbawa). HP host mati → pengganti ambil alih setelah 8 dtk. **Gabung lagi** ke room kosong → dibuka lagi sebagai host (10 dtk).
+- Karakter chibi bulat, animasi tendang, bintang pusing. **Tips nyala secara default, tiap tips sekali di awal** (`settings.tipsDone`; pengaturan Tips Nyala/Mati dan tombol Tampilkan tips lagi).
 - Anti-zoom iPhone Safari (`src/ui/noZoom.ts`, lihat ARCHITECTURE): jangan hapus `touch-action: pan-y` di panel scroll, dan kolom teks baru minimal 16 px. Pengaturan kontrol lengkap (ukuran tombol, posisi analog, getar). Indikator ping, panel `?debug`.
 - Host tetap berjalan saat di latar belakang (timer Web Worker) dan mengejar waktu di perangkat lambat (maks 0,25 dtk per frame).
 
@@ -59,6 +61,7 @@ Cek browser dengan Playwright sesuai skill (viewport 844×390, `?signal=local` u
 
 - PR Dependabot (bump typescript, vite, vitest) **gagal di CI dan Security** per 10 Nov; perlu dicek dan diperbaiki atau ditutup.
 - Integrasi chat app pengguna (Kotlin + Capacitor/Ionic) masih menunggu akses kodenya; SDK siap di `messenger-sdk/`. Repo `whiskey34/chat-app` BUKAN chat app itu.
+- Host pindah: game yang sedang berjalan belum dilanjutkan di host baru (semua kembali ke lobby). Bisa dikembangkan dengan mengirim state lengkap ke pengganti.
 - Ide yang belum dibuat: mode QR tanpa internet, gabung otomatis dari tautan `?join=KODE`, kursi palsu (tas), NPC ikut berebut, kursi diumumkan telat, Manggarai chaos.
 - Keseimbangan: rata-rata game ~25–30 detik, bot jangan terlalu cepat. Setelah ubah gameplay, jalankan simulasi 200 game bot (selalu satu pemenang, tanpa kursi ganda).
 
@@ -69,5 +72,6 @@ Cek browser dengan Playwright sesuai skill (viewport 844×390, `?signal=local` u
 - 10 Nov (v0.8–v0.14): Worker + TURN, gabung lagi, perbaikan pemain tersangkut, stasiun Bogor asli, adu tendang, lantai becek, poin, kursi makin sedikit, es kopi, tips, karakter chibi, papan peringkat, rush hour, kursi prioritas pindah, petugas.
 - 11 Nov (v0.15.0): rush hour lebih padat, ompreng MBG basi, 1–3 item acak per stop.
 - 11 Nov (v0.16.0): perbaikan zoom di Safari iPhone, tips wajib muncul secara default (bisa dimatikan).
+- 11 Nov (v0.17.0): host pindah otomatis ke pemain berikutnya, room kosong bisa dibuka lagi lewat Gabung lagi, tips kembali sekali di awal (tetap default nyala).
 
 Saat sesi selesai, perbarui bagian **Gameplay saat ini**, **Pekerjaan terbuka**, dan **Riwayat singkat** di file ini.

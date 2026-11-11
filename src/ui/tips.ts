@@ -7,7 +7,8 @@ import type { TrainScene } from '../render/scene';
  * Tips, like mobile games: the first time in a game that an item, a challenge
  * or a rule shows up, a short card points at it. Playing alone the game pauses
  * until "Got it"; in multiplayer (which cannot pause) a small bubble shows
- * for 2 seconds. On by default, every game; can be turned off in the settings.
+ * for 2 seconds. On by default; each tip shows once per device (the first
+ * time), can be shown again or turned off in the settings.
  */
 export type TipId =
   | 'coffee'
@@ -106,6 +107,8 @@ export class Tips {
 
   constructor(
     private readonly enabled: () => boolean,
+    private readonly seen: Set<string>,
+    private readonly save: () => void,
     private readonly scene: TrainScene,
     private readonly size: () => { width: number; height: number },
   ) {
@@ -161,8 +164,14 @@ export class Tips {
     if (!this.current) this.next();
   }
 
+  /** "Show tips again" in the settings. */
+  reset(): void {
+    this.seen.clear();
+    this.save();
+  }
+
   private add(id: TipId, anchor: Anchor): void {
-    if (!this.enabled() || this.pending.has(id)) return;
+    if (!this.enabled() || this.seen.has(id) || this.pending.has(id)) return;
     this.pending.add(id);
     this.queue.push({ id, anchor });
   }
@@ -171,6 +180,8 @@ export class Tips {
     const tip = this.queue.shift();
     if (!tip) return;
     this.current = tip;
+    this.seen.add(tip.id);
+    this.save();
     this.render(tip);
   }
 
@@ -212,7 +223,7 @@ export class Tips {
       this.root.innerHTML = `<div class="tipScrim"></div><div class="tipRing"></div>
         <div class="tipCard" role="dialog" aria-live="polite">
           <div class="tipHead">${icon}<div><div class="tipKicker">${kicker}</div><div class="tipTitle"></div></div></div>
-          <p class="tipBody"></p><p class="tipHint">${t('tipOff')}</p>
+          <p class="tipBody"></p><p class="tipHint">${t('tipOnce')}</p>
           <button class="tipBtn">${t('tipOk')}</button>
         </div>`;
       this.root.querySelector('.tipTitle')!.textContent = title;

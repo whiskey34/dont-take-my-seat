@@ -1092,6 +1092,25 @@ input:focus-visible {
   -webkit-user-select: text;
 }
 
+.lobby-note {
+  margin: 0 0 10px;
+  padding: 9px 12px;
+  border-radius: 10px;
+  background: rgba(255, 192, 46, 0.16);
+  border: 1px solid rgba(255, 192, 46, 0.45);
+  color: var(--accent);
+  font-size: 14px;
+  font-weight: 700;
+  animation: note-in 0.35s ease-out;
+}
+
+@keyframes note-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+}
+
 #lobbyStatus.warn {
   color: #ffb4a8;
 }

@@ -109,6 +109,7 @@
               <div class="seg" id="segSound"><button data-v="on" data-t="on"></button><button data-v="off" data-t="off"></button></div>
             </div>
           </div>
+          <button class="btn subtle" id="btnTipsReset" data-t="showTipsAgain"></button>
           <button class="btn primary" id="btnSettingsClose" data-t="close"></button>
         </div>
       </section>
@@ -131,6 +132,7 @@
 
       <section class="screen dim" id="lobby" hidden>
         <div class="menu-card wide lobby-card">
+          <p class="lobby-note" id="lobbyNote" role="status" hidden></p>
           <div class="lobby-head">
             <div id="lobbyCodeBox">
               <div class="eyebrow" data-t="roomCode"></div>

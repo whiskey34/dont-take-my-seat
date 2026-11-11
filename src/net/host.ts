@@ -126,8 +126,14 @@ export class HostNet {
     this.game = null;
   }
 
+  /** The player who takes over as host if this host leaves: the next one still connected. */
+  get successor(): string | null {
+    return this.members.find((m) => m.peer !== null && m.id !== this.transport.selfId)?.id ?? null;
+  }
+
   close(): void {
-    this.broadcast('reliable', { t: 'bye', reason: 'closed' });
+    const next = this.successor;
+    this.broadcast('reliable', next ? { t: 'bye', reason: 'closed', next } : { t: 'bye', reason: 'closed' });
     this.game?.session.dispose();
     this.transport.close();
   }
