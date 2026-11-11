@@ -9,7 +9,10 @@ import type { SignalMsg } from '../src/net/signal/signal';
 class Hub {
   sockets: FakeSocket[] = [];
   reachable = true;
+  /** Events published so far (all relays). */
+  published = 0;
   route(from: FakeSocket, ev: { tags: string[][] }): void {
+    this.published++;
     for (const s of this.sockets) {
       if (s.readyState !== FakeSocket.OPEN) continue;
       for (const [subId, topic] of s.subs) {
@@ -133,6 +136,9 @@ describe('room signaling over relays', () => {
     socketOf(host).drop();
     expect(host.isUp).toBe(false);
     guest.publish(hello('lost'));
+    // Encrypting (WebCrypto, real time) can be slow on CI: wait until the
+    // message has really gone out while the host is down, before time moves on.
+    await until(() => hub.published === 1);
     await settle(20);
     expect(got).toEqual([]);
 
