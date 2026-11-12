@@ -5,6 +5,7 @@ import { BENCH_SEGMENTS, createSeats, POLES, seatSitPos } from '../core/layout';
 import { trainAccel } from '../core/game';
 import type { GameEvent, GameState, PowerUpKind, Seat } from '../core/types';
 import { createFigure, createOfficer, setHair, setSeated, setStride, type Figure } from './figure';
+import { dress, setJumbo } from './outfit';
 import { PLAYER_COLORS, SCENE } from './palette';
 
 const { car } = CONFIG;
@@ -82,6 +83,10 @@ const KICK_FLIGHT = 0.6;
 
 
 /** Owns everything Three.js. Reads game state; never changes it. */
+const seatBagGeo = new THREE.BoxGeometry(0.3, 0.22, 0.16);
+const seatBagHandleGeo = new THREE.TorusGeometry(0.08, 0.015, 6, 14, Math.PI);
+const seatBagHandleMat = new THREE.MeshLambertMaterial({ color: '#3a2a1c' });
+
 export class TrainScene {
   readonly renderer: THREE.WebGLRenderer;
   private readonly scene = new THREE.Scene();
@@ -92,6 +97,8 @@ export class TrainScene {
   private readonly npcs: Figure[] = [];
   private readonly npcAnims: NpcAnim[] = [];
   private readonly markers: THREE.Mesh[] = [];
+  /** Seat bags (shop item), one per seat, shown while a bag holds the seat. */
+  private readonly bags: THREE.Mesh[] = [];
   private readonly doors: THREE.Mesh[][] = [];
   private readonly players = new Map<string, PlayerView>();
   private readonly pulses: Array<{ mesh: THREE.Mesh; t: number }> = [];
@@ -226,6 +233,16 @@ export class TrainScene {
       marker.visible = false;
       this.scene.add(marker);
       this.markers[id] = marker;
+
+      const bag = new THREE.Mesh(seatBagGeo, new THREE.MeshLambertMaterial({ color: '#ffffff' }));
+      bag.position.set(x, 0.62, side * 1.8);
+      bag.visible = false;
+      const handle = new THREE.Mesh(seatBagHandleGeo, seatBagHandleMat);
+      handle.position.y = 0.12;
+      handle.rotation.y = Math.PI / 2;
+      bag.add(handle);
+      this.scene.add(bag);
+      this.bags[id] = bag;
     }
     this.resetNpcs();
   }
@@ -398,14 +415,19 @@ export class TrainScene {
     for (const v of this.players.values()) this.scene.remove(v.fig.root);
     this.players.clear();
     for (const p of state.players) {
-      const fig = createFigure(PLAYER_COLORS[p.colorIndex % PLAYER_COLORS.length]!, '#f0c9a4', true, p.colorIndex * 2);
-      let ring: THREE.Mesh | null = null;
+      const color = PLAYER_COLORS[p.colorIndex % PLAYER_COLORS.length]!;
+      const fig = createFigure(color, '#f0c9a4', true, p.colorIndex * 2);
+      dress(fig, p.look, color);
+      // Identity ring under the feet in the player's colour (shirts can be any
+      // colour now); our own has a white edge as well.
+      const ring = new THREE.Mesh(new THREE.RingGeometry(0.36, 0.48, 32), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.9, depthWrite: false }));
+      ring.rotation.x = -Math.PI / 2;
+      ring.position.y = 0.02;
       if (p.id === humanId) {
-        ring = new THREE.Mesh(new THREE.RingGeometry(0.42, 0.52, 28), new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.9, depthWrite: false }));
-        ring.rotation.x = -Math.PI / 2;
-        ring.position.y = 0.02;
-        fig.root.add(ring);
+        const edge = new THREE.Mesh(new THREE.RingGeometry(0.48, 0.55, 32), new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.95, depthWrite: false }));
+        ring.add(edge);
       }
+      fig.root.add(ring);
       const shield = new THREE.Mesh(
         new THREE.TorusGeometry(0.42, 0.03, 6, 28),
         new THREE.MeshBasicMaterial({ color: SCENE.earphones, transparent: true, opacity: 0.8, depthWrite: false }),
@@ -766,6 +788,7 @@ export class TrainScene {
       r.rotation.z = stunned ? Math.sin(this.clock * 40) * 0.15 : sick ? Math.sin(this.clock * 6) * 0.07 : 0; // poisoned: a bit wobbly
       this.animateKick(v, p, stunned);
       if (v.ring) v.ring.visible = p.seatId === null;
+      setJumbo(v.fig, p.jumbo && !p.eliminated);
       v.shield.visible = state.time < p.shieldUntil && !p.eliminated;
       if (v.shield.visible) v.shield.rotation.z += dt * 3;
     }
@@ -780,6 +803,12 @@ export class TrainScene {
     const scramble = state.phase === 'scramble';
     state.seats.forEach((seat, id) => {
       const free = scramble && !seat.npc && seat.playerId === null;
+      const bag = this.bags[id];
+      if (bag) {
+        const owner = seat.bagBy !== null && state.time < seat.bagUntil && seat.playerId === null ? state.players.find((q) => q.id === seat.bagBy) : undefined;
+        bag.visible = !!owner;
+        if (owner) (bag.material as THREE.MeshLambertMaterial).color.set(PLAYER_COLORS[owner.colorIndex % PLAYER_COLORS.length]!);
+      }
       const marker = this.markers[id];
       if (marker) {
         marker.visible = free;

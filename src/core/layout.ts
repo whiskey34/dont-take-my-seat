@@ -21,7 +21,7 @@ export function createSeats(): Seat[] {
       const start = (a + b) / 2 - ((count - 1) * car.seatWidth) / 2;
       const priority = segIndex === 0 || segIndex === BENCH_SEGMENTS.length - 1;
       for (let i = 0; i < count; i++) {
-        seats.push({ id: id++, x: start + i * car.seatWidth, side, priority, npc: true, playerId: null });
+        seats.push({ id: id++, x: start + i * car.seatWidth, side, priority, npc: true, playerId: null, bagBy: null, bagUntil: 0 });
       }
     });
   }

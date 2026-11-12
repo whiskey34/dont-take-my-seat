@@ -1,7 +1,7 @@
 import { CONFIG } from '../core/config';
 import type { GameEvent, GameState, PlayerInput, PlayerSetup } from '../core/types';
 import { Simulation, type Difficulty, type GameSession } from '../session/session';
-import { cleanName, MAX_NAME, packSnapshot, parseClientMsg, PROTOCOL_VERSION, type HostMsg, type LobbyPlayer } from './protocol';
+import { cleanName, MAX_NAME, packSnapshot, parseClientMsg, PROTOCOL_VERSION, type Gear, type HostMsg, type LobbyPlayer } from './protocol';
 import type { Channel, Transport } from './transport';
 
 const SNAP_INTERVAL = 1 / 20;
@@ -35,6 +35,8 @@ interface Member {
   name: string;
   key: string;
   peer: string | null;
+  /** Accessories and the shop item this player brings. */
+  gear: Gear | null;
 }
 
 interface CurrentGame {
@@ -60,7 +62,7 @@ export class HostNet {
     hostName: string,
     private readonly cb: HostCallbacks,
   ) {
-    this.members = [{ id: transport.selfId, name: cleanName(hostName), key: '', peer: transport.selfId }];
+    this.members = [{ id: transport.selfId, name: cleanName(hostName), key: '', peer: transport.selfId, gear: null }];
     transport.setHandlers({
       message: (from, _ch, data) => this.onMessage(from, data),
       peerOpen: () => {
@@ -101,6 +103,15 @@ export class HostNet {
     return known.length ? Math.max(...known) : null;
   }
 
+  /** Room setting: players may bring shop items (off: accessories only). */
+  shopItems = true;
+
+  /** What the host wears and brings (the others send theirs in their hello). */
+  setOwnGear(gear: Gear): void {
+    const me = this.members.find((m) => m.id === this.transport.selfId);
+    if (me) me.gear = gear;
+  }
+
   /** Enough people connected to play (room games have no bots). */
   get canStart(): boolean {
     return this.members.filter((m) => m.peer !== null).length >= 2;
@@ -112,7 +123,14 @@ export class HostNet {
     this.game?.session.dispose();
     // People who left before this game starts are not kept.
     this.members = this.members.filter((m) => m.peer !== null);
-    const setups: PlayerSetup[] = this.members.map((p) => ({ id: p.id, name: p.name, isBot: false, score: scores.get(p.id) ?? 0 }));
+    const setups: PlayerSetup[] = this.members.map((p) => ({
+      id: p.id,
+      name: p.name,
+      isBot: false,
+      score: scores.get(p.id) ?? 0,
+      look: p.gear?.l ?? {},
+      item: this.shopItems ? (p.gear?.i ?? null) : null,
+    }));
     const session = new HostSession(this.transport, setups, seed, difficulty, () => this.peerIds(), () => this.offline);
     this.game = { session, seed, setups, difficulty };
     this.broadcast('reliable', { t: 'start', seed, players: setups, difficulty });
@@ -150,20 +168,21 @@ export class HostNet {
   private onMessage(from: string, data: string): void {
     const msg = parseClientMsg(data);
     if (!msg) return;
-    if (msg.t === 'hello') return this.hello(from, msg.v, msg.name, msg.k);
+    if (msg.t === 'hello') return this.hello(from, msg.v, msg.name, msg.k, msg.g ?? null);
     const member = this.byPeer(from);
     if (!member) return;
     if (msg.t === 'bye') return this.peerGone(from);
     this.game?.session.receive(member.id, msg);
   }
 
-  private hello(from: string, version: number, name: string, key: string): void {
+  private hello(from: string, version: number, name: string, key: string, gear: Gear | null): void {
     if (version !== PROTOCOL_VERSION) return this.send(from, 'reliable', { t: 'reject', reason: 'version' });
 
     // Same connection says hello again: a name change.
     const current = this.byPeer(from);
     if (current) {
       current.name = uniqueName(name, this.members, current.id);
+      current.gear = gear;
       this.publishLobby();
       return;
     }
@@ -173,7 +192,10 @@ export class HostNet {
     if (returning) {
       const old = returning.peer;
       returning.peer = from;
-      if (!this.game) returning.name = uniqueName(name, this.members, returning.id);
+      if (!this.game) {
+        returning.name = uniqueName(name, this.members, returning.id);
+        returning.gear = gear;
+      }
       if (old && old !== from) this.transport.send(old, 'reliable', JSON.stringify({ t: 'bye', reason: 'left' } satisfies HostMsg));
       this.send(from, 'reliable', { t: 'welcome', v: PROTOCOL_VERSION, id: returning.id });
       if (this.game) {
@@ -187,7 +209,7 @@ export class HostNet {
 
     if (this.game) return this.send(from, 'reliable', { t: 'reject', reason: 'started' });
     if (this.members.length >= CONFIG.maxPlayers) return this.send(from, 'reliable', { t: 'reject', reason: 'full' });
-    this.members.push({ id: from, name: uniqueName(name, this.members, from), key, peer: from });
+    this.members.push({ id: from, name: uniqueName(name, this.members, from), key, peer: from, gear });
     this.send(from, 'reliable', { t: 'welcome', v: PROTOCOL_VERSION, id: from });
     this.publishLobby();
   }
@@ -230,6 +252,7 @@ interface RemoteInput {
   z: number;
   seq: number;
   action: boolean;
+  use: boolean;
   at: number; // when the latest input arrived (ms), for the debug panel
   count: number;
 }
@@ -241,6 +264,7 @@ export class HostSession implements GameSession {
   private readonly sim: Simulation;
   private readonly remote = new Map<string, RemoteInput>();
   private localAction = false;
+  private localUse = false;
   private snapTimer = 0;
   private disposed = false;
 
@@ -261,11 +285,12 @@ export class HostSession implements GameSession {
   }
 
   /** Input from a player (already mapped from connection to player id). */
-  receive(playerId: string, msg: { t: 'in'; s: number; x: number; z: number } | { t: 'act'; s: number }): void {
-    const r = this.remote.get(playerId) ?? { x: 0, z: 0, seq: -1, action: false, at: 0, count: 0 };
+  receive(playerId: string, msg: { t: 'in'; s: number; x: number; z: number } | { t: 'act'; s: number } | { t: 'use'; s: number }): void {
+    const r = this.remote.get(playerId) ?? { x: 0, z: 0, seq: -1, action: false, use: false, at: 0, count: 0 };
     r.at = Date.now();
     r.count++;
     if (msg.t === 'act') r.action = true;
+    else if (msg.t === 'use') r.use = true;
     // Older packets on the unordered channel are ignored. A number far below the
     // last one means the player's device started counting again (e.g. reloaded):
     // follow it instead of ignoring the player from then on.
@@ -295,17 +320,22 @@ export class HostSession implements GameSession {
   update(dt: number, input: PlayerInput): GameEvent[] {
     if (this.disposed) return [];
     this.localAction ||= input.action;
+    this.localUse ||= !!input.useItem;
     const events = this.sim.advance(dt, (id, first) => {
       if (id === this.humanId) {
         const action = first && this.localAction;
+        const useItem = first && this.localUse;
         if (action) this.localAction = false;
-        return { moveX: input.moveX, moveZ: input.moveZ, action };
+        if (useItem) this.localUse = false;
+        return { moveX: input.moveX, moveZ: input.moveZ, action, useItem };
       }
       const r = this.remote.get(id);
       if (!r) return { moveX: 0, moveZ: 0, action: false };
       const action = first && r.action;
+      const useItem = first && r.use;
       if (action) r.action = false;
-      return { moveX: r.x, moveZ: r.z, action };
+      if (useItem) r.use = false;
+      return { moveX: r.x, moveZ: r.z, action, useItem };
     });
 
     if (events.length > 0) this.broadcast('reliable', JSON.stringify({ t: 'ev', e: events } satisfies HostMsg));

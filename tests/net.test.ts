@@ -407,6 +407,26 @@ describe('host and clients', () => {
     expect(clients[1]!.rec.closed).toBe('hostLeft');
   });
 
+  it('brings outfits and shop items into the game; the host can switch items off', () => {
+    const { hub, host, clients } = setupRoom();
+    host.setOwnGear({ l: { head: 'peci-black' }, i: 'ginger' });
+    clients[0]!.net.setGear({ l: { body: 'shirt-pink' }, i: 'seatBag' });
+    for (let i = 0; i < 3; i++) hub.pump();
+    let g = host.start('normal', 5).state;
+    expect(g.players.map((p) => [p.look, p.item])).toEqual([
+      [{ head: 'peci-black' }, 'ginger'],
+      [{ body: 'shirt-pink' }, 'seatBag'],
+      [{}, null],
+    ]);
+    hub.pump();
+    expect(clients[0]!.rec.session?.view().players[1]?.item).toBe('seatBag');
+    host.endGame();
+    host.shopItems = false;
+    g = host.start('normal', 6).state;
+    expect(g.players.map((p) => p.item)).toEqual([null, null, null]);
+    expect(g.players[1]!.look).toEqual({ body: 'shirt-pink' });
+  });
+
   it('names the next connected player as the new host when the host leaves', () => {
     const { hub, host, clients } = setupRoom();
     host.start('normal', 5);

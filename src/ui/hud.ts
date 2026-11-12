@@ -1,8 +1,9 @@
 import { CONFIG } from '../core/config';
-import { isFinalStop, kickBeatsSitting, npcKickSeat, pushTarget, seatInReach, seatKickTarget, trainAccel } from '../core/game';
+import { canUseItem, isFinalStop, kickBeatsSitting, npcKickSeat, pushTarget, seatInReach, seatKickTarget, trainAccel } from '../core/game';
 import type { GameEvent, GameState, Player } from '../core/types';
 import { t } from '../i18n';
 import { PLAYER_COLORS } from '../render/palette';
+import { ITEM_ICON } from '../shop/catalog';
 import type { TrainScene } from '../render/scene';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -33,6 +34,8 @@ export class Hud {
   private readonly banner = $('banner');
   private readonly labels = $('labels');
   private readonly actionBtn = $('actionBtn');
+  private readonly itemBtn = $('itemBtn');
+  private readonly itemIcon = $('itemIcon');
   private readonly actionLabel = $('actionLabel');
   private readonly actionRing = document.querySelector<SVGCircleElement>('#actionRing circle');
   private chips = new Map<string, HTMLElement>();
@@ -204,6 +207,9 @@ export class Hud {
           }
           break;
         }
+        case 'itemUsed':
+          if (e.playerId === me) this.flash(`${ITEM_ICON[e.kind]} ${t(`itemUsed_${e.kind}`)}`, 'good', 1500);
+          break;
         case 'replay':
           this.flash(t('replay'), 'plain', 2000);
           break;
@@ -298,7 +304,19 @@ export class Hud {
     return this.displayName(p) + icons;
   }
 
+  /** The shop item button: shown while we still carry an item; dim while it can't be used. */
+  private updateItem(state: GameState): void {
+    const me = state.players.find((p) => p.id === this.humanId);
+    const show = !!me && !!me.item && !me.eliminated && (state.phase === 'riding' || state.phase === 'scramble');
+    this.itemBtn.classList.toggle('hidden', !show);
+    if (!me || !show || !me.item) return;
+    this.itemIcon.textContent = ITEM_ICON[me.item];
+    this.itemBtn.setAttribute('aria-label', t(`item_${me.item}`));
+    this.itemBtn.classList.toggle('cooling', !canUseItem(state, me));
+  }
+
   private updateAction(state: GameState): void {
+    this.updateItem(state);
     const me = state.players.find((p) => p.id === this.humanId);
     const active = !!me && !me.eliminated && me.seatId === null && (state.phase === 'riding' || state.phase === 'scramble');
     this.actionBtn.classList.toggle('hidden', !active);

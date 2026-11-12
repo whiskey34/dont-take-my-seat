@@ -149,7 +149,11 @@ export function setSeated(f: Figure, seated: boolean): void {
     if (seated) leg.rotation.x = -1.25;
   }
   for (const arm of f.arms) if (seated) arm.rotation.x = -0.55;
-  if (f.pack) f.pack.visible = !seated;
+  if (f.pack) f.pack.visible = !seated && !f.pack.userData.covered;
+  // Bags on the back come off while sitting (they would poke through the bench).
+  f.upper.traverse((o) => {
+    if (o.userData.onBack) o.visible = !seated;
+  });
   f.shadow.visible = !seated;
 }
 

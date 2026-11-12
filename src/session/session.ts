@@ -94,6 +94,7 @@ export class LocalSession implements GameSession {
   readonly kind = 'local';
   private readonly sim: Simulation;
   private pendingAction = false;
+  private pendingUse = false;
 
   constructor(
     setups: readonly PlayerSetup[],
@@ -110,11 +111,14 @@ export class LocalSession implements GameSession {
 
   update(dt: number, input: PlayerInput): GameEvent[] {
     this.pendingAction ||= input.action;
+    this.pendingUse ||= !!input.useItem;
     return this.sim.advance(dt, (id, first) => {
       if (id !== this.humanId) return { moveX: 0, moveZ: 0, action: false };
       const action = first && this.pendingAction;
+      const useItem = first && this.pendingUse;
       if (action) this.pendingAction = false;
-      return { moveX: input.moveX, moveZ: input.moveZ, action };
+      if (useItem) this.pendingUse = false;
+      return { moveX: input.moveX, moveZ: input.moveZ, action, useItem };
     });
   }
 

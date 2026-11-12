@@ -2,7 +2,7 @@ import { en, type Strings } from './en';
 import { id } from './id';
 
 export type Lang = 'en' | 'id';
-type TextKey = { [K in keyof Strings]: Strings[K] extends string ? K : never }[keyof Strings];
+export type TextKey = { [K in keyof Strings]: Strings[K] extends string ? K : never }[keyof Strings];
 
 const tables: Record<Lang, Strings> = { en, id };
 let current: Lang = 'en';

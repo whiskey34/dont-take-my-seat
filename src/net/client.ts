@@ -2,7 +2,7 @@ import { keepOutOfStanders } from '../core/challenges';
 import { constrainToCar, createGame, move } from '../core/game';
 import type { GameEvent, GameState, Player, PlayerInput, PlayerSetup, Vec2 } from '../core/types';
 import { withPositions, type GameSession } from '../session/session';
-import { applySnapshot, parseHostMsg, PROTOCOL_VERSION, type ClientMsg, type LobbyPlayer, type RejectReason, type Snapshot } from './protocol';
+import { applySnapshot, parseHostMsg, PROTOCOL_VERSION, type ClientMsg, type Gear, type LobbyPlayer, type RejectReason, type Snapshot } from './protocol';
 import type { Transport } from './transport';
 
 /** How far behind the newest snapshot other players are drawn (seconds). */
@@ -30,6 +30,8 @@ export interface ClientCallbacks {
 /** Connection to a host, from the lobby through any number of games. */
 export class ClientNet {
   private myId: string | null = null;
+  /** What we wear and the shop item we bring; sent with every hello. */
+  gear: Gear | null = null;
   /** The host closed the room on purpose (not a dropped link, not replaced by our own new connection). */
   hostClosed = false;
   /** The player the host named to take over when it closed the room. */
@@ -53,7 +55,9 @@ export class ClientNet {
     private name: string,
     private readonly key: string,
     private readonly cb: ClientCallbacks,
+    gear: Gear | null = null,
   ) {
+    this.gear = gear;
     transport.setHandlers({
       message: (from, _ch, data) => {
         if (from !== this.hostId) return;
@@ -62,7 +66,7 @@ export class ClientNet {
       },
       peerOpen: (id) => {
         this.hostId ??= id;
-        if (id === this.hostId) this.send({ t: 'hello', v: PROTOCOL_VERSION, name: this.name, k: this.key });
+        if (id === this.hostId) this.send(this.hello());
       },
       peerClose: (id) => {
         if (id === this.hostId) this.finish('lost');
@@ -74,7 +78,17 @@ export class ClientNet {
       if (this.session && !hidden && Date.now() - this.lastHeard > SILENCE_MS) this.finish('lost');
     }, 1000);
     if (typeof document !== 'undefined') document.addEventListener('visibilitychange', this.onVisible);
-    if (hostId && transport.peers().includes(hostId)) this.send({ t: 'hello', v: PROTOCOL_VERSION, name, k: key });
+    if (hostId && transport.peers().includes(hostId)) this.send(this.hello());
+  }
+
+  private hello(): ClientMsg {
+    return this.gear ? { t: 'hello', v: PROTOCOL_VERSION, name: this.name, k: this.key, g: this.gear } : { t: 'hello', v: PROTOCOL_VERSION, name: this.name, k: this.key };
+  }
+
+  /** New outfit or item in the lobby: tell the host (a repeated hello). */
+  setGear(gear: Gear): void {
+    this.gear = gear;
+    if (this.myId) this.send(this.hello());
   }
 
   get id(): string | null {
@@ -105,7 +119,7 @@ export class ClientNet {
   /** Changes our name in the lobby (the host treats a repeated hello as a rename). */
   rename(name: string): void {
     this.name = name;
-    if (this.myId) this.send({ t: 'hello', v: PROTOCOL_VERSION, name, k: this.key });
+    if (this.myId) this.send(this.hello());
   }
 
   leave(): void {
@@ -318,6 +332,7 @@ export class ClientSession implements GameSession {
       this.maxInputAt = this.clock;
     }
     if (input.action) this.sendMsg({ t: 'act', s: this.nextSeq() });
+    if (input.useItem) this.sendMsg({ t: 'use', s: this.nextSeq() });
     const changed = Math.abs(input.moveX - this.lastSent.x) > 0.05 || Math.abs(input.moveZ - this.lastSent.z) > 0.05;
     if (changed || this.clock - this.lastSent.at >= INPUT_INTERVAL) {
       this.moveSeq = this.nextSeq();

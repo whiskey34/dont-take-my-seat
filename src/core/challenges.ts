@@ -134,6 +134,7 @@ function huntTarget(s: GameState, st: Stander): Seat | undefined {
   for (const id of ids) {
     const seat = s.seats[id];
     if (!seat || seat.npc || seat.playerId !== null || seat.priority !== !!st.hunt?.elder) continue;
+    if (seat.bagBy !== null && s.time < seat.bagUntil) continue; // someone's bag is on it
     const front = seatFront(seat);
     const d = Math.hypot(front.x - st.pos.x, front.z - st.pos.z);
     if (d < bestD) {
@@ -208,8 +209,11 @@ export function collectPowerUps(s: GameState, events: GameEvent[]): void {
     else if (u.kind === 'coffee') p.boostUntil = s.time + PU.boostTime;
     else if (u.kind === 'mbg') {
       // Food poisoning: green and slow. It also spoils a coffee boost.
-      p.sickUntil = s.time + PU.sickTime;
-      p.boostUntil = 0;
+      // Ginger candy (shop item) settles the stomach.
+      if (!p.ginger) {
+        p.sickUntil = s.time + PU.sickTime;
+        p.boostUntil = 0;
+      }
     }
     else p.sleeping = true;
     events.push({ type: 'powerUp', playerId: p.id, kind: u.kind });

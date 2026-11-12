@@ -1,7 +1,8 @@
-import { ALL_CHALLENGES, POWER_UP_KINDS, type ChallengeKind, type GameEvent, type GameState, type Phase, type Player, type PlayerSetup, type PowerUpKind, type Seat, type Stander } from '../core/types';
+import { ALL_CHALLENGES, POWER_UP_KINDS, type ChallengeKind, type GameEvent, type GameState, type Phase, type Player, type PlayerSetup, type PowerUpKind, type Seat, type Stander, ITEM_KINDS, type ItemKind, type Look } from '../core/types';
+import { cleanLook, isItemKind } from '../shop/catalog';
 
 /** Bump when messages change incompatibly; peers with another version are refused. */
-export const PROTOCOL_VERSION = 12;
+export const PROTOCOL_VERSION = 13;
 export const MAX_NAME = 14;
 
 export interface LobbyPlayer {
@@ -13,10 +14,18 @@ export interface LobbyPlayer {
 
 export type ClientMsg =
   /** `k` is this device's player key; the same key can rejoin a game in progress. */
-  | { t: 'hello'; v: number; name: string; k: string }
+  /** `g`: what the player wears and the shop item they bring. */
+  | { t: 'hello'; v: number; name: string; k: string; g?: Gear }
   | { t: 'in'; s: number; x: number; z: number }
   | { t: 'act'; s: number }
+  | { t: 'use'; s: number }
   | { t: 'bye' };
+
+/** Accessories and the shop item a player brings into a room. */
+export interface Gear {
+  l: Look;
+  i: ItemKind | null;
+}
 
 export type HostMsg =
   | { t: 'welcome'; v: number; id: string }
@@ -42,8 +51,10 @@ export interface Snapshot {
   free: number[];
   trap: number;
   winner: string;
-  /** [id, x, z, vx, vz, facing, seat, eliminated, elimRound, stunnedUntil, pushReadyAt, kickAt, shieldUntil, sleeping, score, boostUntil, slipUntil, npcStrikes, sickUntil] */
-  p: Array<[string, number, number, number, number, number, number, 0 | 1, number, number, number, number, number, 0 | 1, number, number, number, number, number]>;
+  /** [id, x, z, vx, vz, facing, seat, eliminated, elimRound, stunnedUntil, pushReadyAt, kickAt, shieldUntil, sleeping, score, boostUntil, slipUntil, npcStrikes, sickUntil, item (index in ITEM_KINDS + 1, 0 none), flags (1 jumbo, 2 ginger)] */
+  p: Array<[string, number, number, number, number, number, number, 0 | 1, number, number, number, number, number, 0 | 1, number, number, number, number, number, number, number]>;
+  /** Seat bags: [seatId, playerId, until]. */
+  bag: Array<[number, string, number]>;
   /** Puddles [x, z, r] (wet floor challenge). */
   pd: Array<[number, number, number]>;
   /** Challenge of this stop ('' none), sudden-brake end time, open door side. */
@@ -102,7 +113,10 @@ export function packSnapshot(s: GameState, offline: Iterable<string> = [], acks:
       r3(p.slipUntil),
       p.npcStrikes,
       r3(p.sickUntil),
+      p.item ? ITEM_KINDS.indexOf(p.item) + 1 : 0,
+      (p.jumbo ? 1 : 0) | (p.ginger ? 2 : 0),
     ]),
+    bag: s.seats.filter((x) => x.bagBy !== null && s.time < x.bagUntil).map((x) => [x.id, x.bagBy!, r3(x.bagUntil)]),
     pd: s.puddles.map((d) => [r3(d.x), r3(d.z), r3(d.r)]),
     ch: s.challenge ?? '',
     bk: r3(s.brakeUntil),
@@ -140,6 +154,16 @@ export function applySnapshot(s: GameState, snap: Snapshot): void {
     const seat = s.seats[id];
     if (seat) seat.playerId = pid;
   }
+  for (const seat of s.seats) {
+    seat.bagBy = null;
+    seat.bagUntil = 0;
+  }
+  for (const [id, pid, until] of snap.bag) {
+    const seat = s.seats[id];
+    if (!seat) continue;
+    seat.bagBy = pid;
+    seat.bagUntil = until;
+  }
   s.challenge = snap.ch || null;
   s.brakeUntil = snap.bk;
   s.doorSide = snap.ds;
@@ -172,6 +196,9 @@ export function applyPlayerRow(p: Player, row: Snapshot['p'][number]): void {
   p.slipUntil = row[16];
   p.npcStrikes = row[17];
   p.sickUntil = row[18];
+  p.item = ITEM_KINDS[row[19] - 1] ?? null;
+  p.jumbo = (row[20] & 1) !== 0;
+  p.ginger = (row[20] & 2) !== 0;
 }
 
 // --------------------------------------------------------------- validation
@@ -209,12 +236,17 @@ export function parseClientMsg(data: string): ClientMsg | null {
   if (!isObj(m)) return null;
   switch (m.t) {
     case 'hello':
-      return isInt(m.v) ? { t: 'hello', v: m.v, name: cleanName(m.name), k: cleanKey(m.k) } : null;
+      if (!isInt(m.v)) return null;
+      return isObj(m.g)
+        ? { t: 'hello', v: m.v, name: cleanName(m.name), k: cleanKey(m.k), g: { l: cleanLook(m.g.l), i: isItemKind(m.g.i) ? m.g.i : null } }
+        : { t: 'hello', v: m.v, name: cleanName(m.name), k: cleanKey(m.k) };
     case 'in':
       if (!isInt(m.s) || !isNum(m.x) || !isNum(m.z)) return null;
       return { t: 'in', s: m.s, x: Math.max(-1, Math.min(1, m.x)), z: Math.max(-1, Math.min(1, m.z)) };
     case 'act':
       return isInt(m.s) ? { t: 'act', s: m.s } : null;
+    case 'use':
+      return isInt(m.s) ? { t: 'use', s: m.s } : null;
     case 'bye':
       return { t: 'bye' };
     default:
@@ -243,6 +275,8 @@ export function parseHostMsg(data: string): HostMsg | null {
         name: cleanName(p.name),
         isBot: p.isBot === true,
         score: isInt(p.score) && p.score >= 0 ? p.score : 0,
+        look: cleanLook(p.look),
+        item: isItemKind(p.item) ? p.item : null,
       }));
       return { t: 'start', seed: m.seed, players, difficulty: m.difficulty === 'easy' ? 'easy' : 'normal' };
     }
@@ -264,7 +298,8 @@ function isSnapshot(v: unknown): v is Snapshot {
   if (!Array.isArray(v.free) || !v.free.every(isInt) || !isInt(v.trap) || !isStr(v.winner)) return false;
   if (typeof v.npc !== 'string' || v.npc.length > 200 || !Array.isArray(v.occ) || !Array.isArray(v.p) || v.p.length > 4) return false;
   if (!v.occ.every((o) => Array.isArray(o) && o.length === 2 && isInt(o[0]) && isStr(o[1]))) return false;
-  if (!v.p.every((row) => Array.isArray(row) && row.length === 19 && isStr(row[0]) && row.slice(1).every(isNum))) return false;
+  if (!v.p.every((row) => Array.isArray(row) && row.length === 21 && isStr(row[0]) && row.slice(1).every(isNum))) return false;
+  if (!Array.isArray(v.bag) || v.bag.length > 8 || !v.bag.every((b) => Array.isArray(b) && b.length === 3 && isInt(b[0]) && isStr(b[1]) && isNum(b[2]))) return false;
   if (v.ch !== '' && !ALL_CHALLENGES.includes(v.ch as ChallengeKind)) return false;
   if (!isNum(v.bk) || (v.ds !== -1 && v.ds !== 0 && v.ds !== 1)) return false;
   if (!Array.isArray(v.st) || v.st.length > 30 || !v.st.every((r) => Array.isArray(r) && r.length === 4 && r.every(isNum))) return false;
@@ -308,6 +343,8 @@ function isEvent(e: unknown): e is GameEvent {
       return isInt(e.seatId);
     case 'npcPushed':
       return isStr(e.by);
+    case 'itemUsed':
+      return isStr(e.playerId) && isItemKind(e.kind) && (e.seatId === undefined || isInt(e.seatId));
     case 'winner':
     case 'shielded':
       return isStr(e.playerId);

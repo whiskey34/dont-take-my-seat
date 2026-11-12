@@ -3,7 +3,8 @@ import { BOGOR_LINE, CONFIG, NAMBO_BRANCH, ROUTE_LENGTH } from './config';
 import { createSeats, POLES, seatFront, seatSitPos } from './layout';
 import { nextRandom, pickDistinct } from './rng';
 import type { GameEvent, GameState, Phase, Player, PlayerId, PlayerInput, PlayerSetup, Seat, Vec2 } from './types';
-import { NO_INPUT } from './types';
+import { ITEM_KINDS, NO_INPUT } from './types';
+import type { ItemKind } from './types';
 
 const { car, player: P, push: PUSH, phase: PH } = CONFIG;
 
@@ -38,6 +39,10 @@ export function createGame(setups: readonly PlayerSetup[], seed: number): GameSt
     npcStrikes: 0,
     sickUntil: 0,
     score: Math.max(0, Math.floor(s.score ?? 0)),
+    look: { ...s.look },
+    item: s.item && ITEM_KINDS.includes(s.item) ? s.item : null,
+    jumbo: false,
+    ginger: false,
   }));
   const [route, rngAfterRoute] = pickRoute(seed | 0);
   const state: GameState = {
@@ -101,6 +106,7 @@ export function seatInReach(s: GameState, p: Player): Seat | undefined {
   let bestD: number = CONFIG.sitRange;
   for (const seat of s.seats) {
     if (seat.npc || seat.playerId !== null) continue;
+    if (seat.bagBy !== null && seat.bagBy !== p.id && s.time < seat.bagUntil) continue; // someone's bag is on it
     const d = dist(p.pos, seatFront(seat));
     if (d <= bestD) {
       best = seat;
@@ -125,6 +131,7 @@ export function step(s: GameState, inputs: ReadonlyMap<PlayerId, PlayerInput>, d
     for (const p of s.players) {
       if (p.eliminated) continue;
       const input = inputs.get(p.id) ?? NO_INPUT;
+      if (input.useItem) useItem(s, p, events);
       handleAction(s, p, input, events);
       if (p.seatId === null && move(s, p, input, dt)) events.push({ type: 'slipped', playerId: p.id });
     }
@@ -192,6 +199,8 @@ function startRound(s: GameState, events: GameEvent[]): void {
   for (const seat of s.seats) {
     seat.npc = true;
     seat.playerId = null;
+    seat.bagBy = null;
+    seat.bagUntil = 0;
   }
   s.freeSeatIds = [];
   s.trapSeatId = null;
@@ -441,6 +450,7 @@ function handleAction(s: GameState, p: Player, input: PlayerInput, events: GameE
     p.pushReadyAt = s.time + PUSH.cooldown;
     p.facing = Math.atan2(dir.x, dir.z);
     pushHunter(s, hunter.st, dir);
+    p.jumbo = false;
     events.push({ type: 'npcPushed', by: p.id });
     return;
   }
@@ -455,9 +465,13 @@ function handleAction(s: GameState, p: Player, input: PlayerInput, events: GameE
     events.push({ type: 'shielded', playerId: target.id });
     return;
   }
-  target.vel.x += (dx / len) * PUSH.impulse;
-  target.vel.z += (dz / len) * PUSH.impulse;
-  target.stunnedUntil = s.time + PUSH.stun;
+  // Jumbo backpack (shop item): this push knocks harder.
+  const power = p.jumbo ? CONFIG.item.jumboImpulse : 1;
+  const daze = p.jumbo ? CONFIG.item.jumboStun : 1;
+  p.jumbo = false;
+  target.vel.x += (dx / len) * PUSH.impulse * power;
+  target.vel.z += (dz / len) * PUSH.impulse * power;
+  target.stunnedUntil = s.time + PUSH.stun * daze;
   events.push({ type: 'pushed', by: p.id, target: target.id });
 }
 
@@ -555,6 +569,79 @@ function kickOffSeat(s: GameState, p: Player, target: Player, events: GameEvent[
   addPoints(p, CONFIG.points.kick, 'kick', events);
 }
 
+// ---------------------------------------------------------------- shop items
+
+/** The open seat a seat bag would go on: the nearest ordinary free seat in range. */
+export function bagSeat(s: GameState, p: Player): Seat | undefined {
+  if (s.phase !== 'scramble') return undefined;
+  let best: Seat | undefined;
+  let bestD: number = CONFIG.item.bagRange;
+  for (const id of s.freeSeatIds) {
+    const seat = s.seats[id];
+    if (!seat || seat.npc || seat.playerId !== null || seat.priority || (seat.bagBy !== null && s.time < seat.bagUntil)) continue;
+    const d = dist(p.pos, seatFront(seat));
+    if (d <= bestD) {
+      best = seat;
+      bestD = d;
+    }
+  }
+  return best;
+}
+
+/** True when the player could use their shop item right now. */
+export function canUseItem(s: GameState, p: Player): boolean {
+  if (!p.item || p.eliminated || (s.phase !== 'riding' && s.phase !== 'scramble')) return false;
+  if (p.item === 'ginger') return true;
+  if (p.seatId !== null || s.time < p.stunnedUntil) return false;
+  if (p.item === 'jumboPack') return !p.jumbo;
+  if (p.item === 'seatBag') return !!bagSeat(s, p);
+  return true;
+}
+
+function useItem(s: GameState, p: Player, events: GameEvent[]): void {
+  if (!canUseItem(s, p)) return;
+  const kind = p.item as ItemKind;
+  const I = CONFIG.item;
+  let seatId: number | undefined;
+  if (kind === 'jumboPack') p.jumbo = true;
+  else if (kind === 'ginger') {
+    p.ginger = true;
+    p.sickUntil = Math.min(p.sickUntil, s.time); // also settles a stomach that is already upset
+  } else if (kind === 'runShoes') p.boostUntil = Math.max(p.boostUntil, s.time + I.shoesTime);
+  else if (kind === 'seatBag') {
+    const seat = bagSeat(s, p)!;
+    seat.bagBy = p.id;
+    seat.bagUntil = s.time + I.bagTime;
+    seatId = seat.id;
+  } else if (kind === 'shoulder') {
+    // Everyone standing close around you gets shoved away.
+    p.pushReadyAt = s.time + PUSH.cooldown;
+    for (const o of s.players) {
+      if (o === p || o.eliminated || o.seatId !== null) continue;
+      const dx = o.pos.x - p.pos.x;
+      const dz = o.pos.z - p.pos.z;
+      const d = Math.hypot(dx, dz);
+      if (d > I.shoulderRange) continue;
+      if (isShielded(s, o)) {
+        events.push({ type: 'shielded', playerId: o.id });
+        continue;
+      }
+      const len = d || 1;
+      o.vel.x += (dx / len) * I.shoulderImpulse;
+      o.vel.z += (dz / len) * I.shoulderImpulse;
+      o.stunnedUntil = s.time + PUSH.stun;
+      events.push({ type: 'pushed', by: p.id, target: o.id });
+    }
+    for (const st of s.standers) {
+      if (st.hunt && Math.hypot(st.pos.x - p.pos.x, st.pos.z - p.pos.z) <= I.shoulderRange) {
+        pushHunter(s, st, { x: st.pos.x - p.pos.x, z: st.pos.z - p.pos.z });
+      }
+    }
+  }
+  p.item = null;
+  events.push(seatId === undefined ? { type: 'itemUsed', playerId: p.id, kind } : { type: 'itemUsed', playerId: p.id, kind, seatId });
+}
+
 /** True if the point is inside a puddle (wet floor challenge). */
 export function onPuddle(s: GameState, pos: Vec2): boolean {
   return s.puddles.some((d) => Math.hypot(pos.x - d.x, pos.z - d.z) < d.r);
@@ -640,7 +727,7 @@ export function move(s: GameState, p: Player, input: PlayerInput, dt: number): b
  */
 function slip(s: GameState, p: Player): boolean {
   const C = CONFIG.challenge;
-  if (s.puddles.length === 0 || s.time < p.stunnedUntil + C.slipAgainAfter || !onPuddle(s, p.pos)) return false;
+  if (p.ginger || s.puddles.length === 0 || s.time < p.stunnedUntil + C.slipAgainAfter || !onPuddle(s, p.pos)) return false;
   const v = Math.hypot(p.vel.x, p.vel.z);
   if (v < C.slipMinSpeed) return false;
   p.vel = { x: (p.vel.x / v) * C.slipSpeed, z: (p.vel.z / v) * C.slipSpeed };

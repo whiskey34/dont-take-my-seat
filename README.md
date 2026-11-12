@@ -31,6 +31,8 @@ Detail teknis ada di [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
   - **Adu tendang:** berdiri di depan pemain yang duduk lalu tekan **TENDANG** untuk menendangnya dari kursi (earphone menahan tendangan). Waktu rebutan berjalan penuh karena kursi bisa berpindah tangan.
   - **Lantai becek:** genangan air di lantai; lari ke genangan dan kamu terpeleset, terlempar cukup jauh dan tidak bisa dikendalikan sebentar. Jalan pelan aman.
 - **Poin:** +10 setiap stasiun kamu tetap duduk, +5 setiap tendangan, +50 kalau menang. Game selesai saat tinggal satu pemain: muncul daftar juara (🥇 Juara 1 paling atas, lalu 🥈, 🥉, dan posisi lainnya) dengan confetti. Tekan **Lanjutkan** untuk game berikutnya (poin terus bertambah) atau **Keluar**; tidak ada hitung mundur. Di room, host yang menekan Lanjutkan untuk semua pemain.
+
+**Shop (TokopaEdi):** kumpulkan koin dari setiap game (1 koin per 5 poin + bonus juara 1–3). Beli aksesoris untuk gaya (topi, kaos, masker/kacamata, tas) dan item sekali pakai: Tas Ransel Jumbo, Dorongan Bahu, Sepatu Lari, Taruh Tas di Kursi, Permen Jahe. Bawa 1 item per game, pakai dengan tombol item (atau E). Host room bisa mematikan item toko di Pengaturan.
 - **Power-up di lantai** (satu per stasiun, ambil dengan berjalan di atasnya):
   - 🎧 **Earphone:** kebal dorongan selama 4 detik.
   - 💤 **Pura-pura tidur:** sekali duduk di kursi prioritas tanpa disuruh berdiri.

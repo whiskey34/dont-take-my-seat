@@ -11,6 +11,8 @@ export interface PlayerInput {
   moveZ: number;
   /** True on the single tick the action button was pressed. */
   action: boolean;
+  /** True on the single tick the shop-item button was pressed. */
+  useItem?: boolean;
 }
 
 export const NO_INPUT: PlayerInput = Object.freeze({ moveX: 0, moveZ: 0, action: false });
@@ -37,6 +39,14 @@ export interface Player {
   slipUntil: number; // slipped on a puddle: sliding, out of control until then
   /** Times caught kicking a seated passenger this game (2nd time: taken off the train). */
   npcStrikes: number;
+  /** Accessories (cosmetic only). */
+  look: Look;
+  /** Shop item brought into this game and not used yet. */
+  item: ItemKind | null;
+  /** Jumbo backpack ready: the next push is stronger. */
+  jumbo: boolean;
+  /** Ginger candy: the MBG tray and puddles don't affect you this game. */
+  ginger: boolean;
 }
 
 /** Mini event: these seats turn into priority seats at `at` (blinking red before). */
@@ -54,6 +64,9 @@ export interface Seat {
   priority: boolean;
   npc: boolean; // an NPC passenger is sitting here
   playerId: PlayerId | null;
+  /** Seat bag: only this player can sit here until `bagUntil`. */
+  bagBy: PlayerId | null;
+  bagUntil: number;
 }
 
 export type Phase = 'intro' | 'riding' | 'scramble' | 'result' | 'gameOver';
@@ -76,6 +89,25 @@ export type PointsReason = 'round' | 'win' | 'kick' | 'penalty';
 
 export type PowerUpKind = 'earphones' | 'sleep' | 'coffee' | 'mbg';
 export const POWER_UP_KINDS: readonly PowerUpKind[] = ['earphones', 'sleep', 'coffee', 'mbg'];
+
+/**
+ * Shop items (bought with coins, one brought into a game, used once):
+ * - jumboPack: the next push knocks harder and dazes longer (earphones block it)
+ * - shoulder: pushes everyone standing close around you at once (earphones block it)
+ * - runShoes: a short sprint (puddles still make you slip)
+ * - seatBag: leave your bag on the nearest open seat; only you can sit there for a moment
+ * - ginger: ginger candy, the stale MBG tray and wet floors can't get you this game
+ */
+export type ItemKind = 'jumboPack' | 'shoulder' | 'runShoes' | 'seatBag' | 'ginger';
+export const ITEM_KINDS: readonly ItemKind[] = ['jumboPack', 'shoulder', 'runShoes', 'seatBag', 'ginger'];
+
+/** Accessory ids per slot (see src/shop/catalog.ts); purely cosmetic. */
+export interface Look {
+  head?: string;
+  body?: string;
+  face?: string;
+  back?: string;
+}
 
 /** A standing NPC passenger: an obstacle that drifts around the aisle. */
 export interface Stander {
@@ -150,6 +182,8 @@ export type GameEvent =
   | { type: 'npcSat'; seatId: number }
   /** A player pushed a seat-hunting passenger. */
   | { type: 'npcPushed'; by: PlayerId }
+  /** A player used their shop item. */
+  | { type: 'itemUsed'; playerId: PlayerId; kind: ItemKind; seatId?: number }
   | { type: 'winner'; playerId: PlayerId }
   | { type: 'challenge'; kind: ChallengeKind }
   | { type: 'suddenBrake' }
@@ -170,4 +204,7 @@ export interface PlayerSetup {
   isBot: boolean;
   /** Points from earlier games in this session. */
   score?: number;
+  look?: Look;
+  /** Shop item brought into the game. */
+  item?: ItemKind | null;
 }

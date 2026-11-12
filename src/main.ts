@@ -22,6 +22,10 @@ import { TrainScene } from './render/scene';
 import { LocalSession, type GameSession } from './session/session';
 import { Hud } from './ui/hud';
 import { Tips } from './ui/tips';
+import { ShopUI } from './ui/shop';
+import { coinsForGame, earn, itemUsed, loadShop, saveShop } from './shop/wallet';
+import { randomLook } from './shop/catalog';
+import type { Gear } from './net/protocol';
 import { layoutSize, preventPageZoom } from './ui/noZoom';
 import { confetti, stopConfetti } from './ui/confetti';
 import { applyPendingUpdate, canInstall, initPwa, install, needsIosHint } from './ui/pwa';
@@ -39,7 +43,7 @@ const EMPTY_ROOM_MS = 10_000;
 const TAKEOVER_MS = 8_000;
 
 type Mode = 'menu' | 'lobby' | 'playing' | 'paused' | 'over';
-type Screen = 'menu' | 'howto' | 'pause' | 'gameover' | 'settingsScreen' | 'joinScreen' | 'lobby' | 'boardScreen';
+type Screen = 'menu' | 'howto' | 'pause' | 'gameover' | 'settingsScreen' | 'joinScreen' | 'lobby' | 'boardScreen' | 'shopScreen';
 
 /** The multiplayer connection, when there is one. */
 type Net =
@@ -59,8 +63,12 @@ class App {
   private readonly hud = new Hud();
   private tips!: Tips;
   private tipShown = false;
-  private readonly controls = new Controls($('stickZone'), $('stickBase'), $('stickKnob'), $('actionBtn'));
+  private readonly controls = new Controls($('stickZone'), $('stickBase'), $('stickKnob'), $('actionBtn'), $('itemBtn'));
   private settings = loadSettings();
+  /** Coins, accessories and items (TokopaEdi), kept on this device. */
+  private readonly shop = loadShop();
+  private botLookSeed = 0;
+  private readonly shopUI = new ShopUI(this.shop, () => this.shopChanged());
   private mode: Mode = 'menu';
   private session!: GameSession;
   private net: Net | null = null;
@@ -171,16 +179,17 @@ class App {
   /** Bots playing behind the menus. */
   private startDemo(): void {
     const seed = this.nextSeed();
-    const setups: PlayerSetup[] = Array.from({ length: CONFIG.maxPlayers }, (_, i) => ({ id: `demo${i}`, name: botName(i + 1), isBot: true }));
+    const setups: PlayerSetup[] = Array.from({ length: CONFIG.maxPlayers }, (_, i) => ({ id: `demo${i}`, name: botName(i + 1), isBot: true, look: randomLook(seed + i) }));
     this.setSession(new LocalSession(setups, seed, 'normal', null));
   }
 
   private startLocalGame(scores: ReadonlyMap<string, number> = new Map()): void {
     const seed = this.nextSeed();
-    const setups: PlayerSetup[] = [{ id: HUMAN, name: this.name, isBot: false, score: scores.get(HUMAN) ?? 0 }];
+    const setups: PlayerSetup[] = [{ id: HUMAN, name: this.name, isBot: false, score: scores.get(HUMAN) ?? 0, look: { ...this.shop.look }, item: this.shop.carry }];
     for (let i = 1; setups.length < CONFIG.maxPlayers; i++) {
       const id = `bot${i}`;
-      setups.push({ id, name: botName(i), isBot: true, score: scores.get(id) ?? 0 });
+      // Bots wear random outfits (the same ones all session), but never bring items.
+      setups.push({ id, name: botName(i), isBot: true, score: scores.get(id) ?? 0, look: randomLook(i * 31 + (this.botLookSeed ||= seed)) });
     }
     this.beginGame(new LocalSession(setups, seed, this.settings.difficulty, HUMAN));
   }
@@ -337,6 +346,11 @@ class App {
       if (e.type === 'doorsOpen') play('chime');
       if (e.type === 'pushed' && (e.by === me || e.target === me)) play('push');
       if (e.type === 'npcPushed' && e.by === me) play('push');
+      if (e.type === 'itemUsed' && e.playerId === me) {
+        play('pickup');
+        itemUsed(this.shop, e.kind);
+        saveShop(this.shop);
+      }
       if (e.type === 'sat' && e.playerId === me) {
         play('sit');
         this.buzz(15);
@@ -385,6 +399,8 @@ class App {
     let host: HostNet | null = null;
     const transport = new RtcHostTransport(signaling, randomId('h'), () => host?.accepting ?? false);
     host = new HostNet(transport, this.name, { lobby: (p) => this.renderLobby(p) });
+    host.setOwnGear(this.gear());
+    host.shopItems = this.settings.shopItems;
     this.net = { kind: 'host', host, code, messenger: null };
     // Tell the host when friends cannot reach the room (e.g. right after switching apps).
     if (signaling instanceof RoomSignaling) signaling.onStatus(() => this.renderLobby(this.lobbyPlayers));
@@ -431,7 +447,7 @@ class App {
     // Gave up or left while the relays were connecting.
     if (this.attempt !== attempt || (this.mode !== 'lobby' && !this.reconnecting)) return signaling.close();
     const transport = new RtcJoinTransport(signaling, () => randomId('p'), (reason) => this.connectionClosed(reason), onStage, timeoutMs);
-    const client = new ClientNet(transport, null, this.name, await this.playerKey, this.clientCallbacks());
+    const client = new ClientNet(transport, null, this.name, await this.playerKey, this.clientCallbacks(), this.gear());
     this.net = { kind: 'client', client, code, messenger: null };
   }
 
@@ -497,11 +513,13 @@ class App {
     this.openLobby({ code: null, isHost, status: isHost ? '' : t('waitingHost') });
     if (isHost) {
       const host = new HostNet(transport, myName, { lobby: (p) => this.renderLobby(p) });
+      host.setOwnGear(this.gear());
+      host.shopItems = this.settings.shopItems;
       this.net = { kind: 'host', host, code: null, messenger: transport };
       this.renderLobby(host.players);
     } else {
       this.boardKey = Promise.resolve(chatPlayerKey(init.self.id));
-      const client = new ClientNet(transport, init.session.hostId, myName, chatPlayerKey(init.self.id), this.clientCallbacks());
+      const client = new ClientNet(transport, init.session.hostId, myName, chatPlayerKey(init.self.id), this.clientCallbacks(), this.gear());
       this.net = { kind: 'client', client, code: null, messenger: transport };
     }
   }
@@ -702,7 +720,7 @@ class App {
   // ---------------------------------------------------------------- screens
 
   private show(screen: Screen | null): void {
-    for (const id of ['menu', 'howto', 'pause', 'gameover', 'settingsScreen', 'joinScreen', 'lobby', 'boardScreen'] as const) $(id).hidden = id !== screen;
+    for (const id of ['menu', 'howto', 'pause', 'gameover', 'settingsScreen', 'joinScreen', 'lobby', 'boardScreen', 'shopScreen'] as const) $(id).hidden = id !== screen;
   }
 
   private notice(text: string): void {
@@ -799,6 +817,16 @@ class App {
       }),
     );
 
+    // Coins for this game (shop currency; never lost to penalties).
+    const coinsGot = mine ? coinsForGame(gainOf(mine), placeOf(mine)) : 0;
+    if (coinsGot > 0) {
+      earn(this.shop, coinsGot);
+      saveShop(this.shop);
+      this.syncCoins();
+    }
+    $('overCoins').hidden = coinsGot <= 0;
+    $('overCoins').textContent = `🪙 ${t('coinsEarned', { n: coinsGot })} · ${t('coins', { n: this.shop.coins })}`;
+
     void this.reportToBoard(g, me);
     // No countdown: everyone chooses to continue or leave. In a room the host
     // continues for everyone; the others wait (or leave).
@@ -881,7 +909,28 @@ class App {
     document.title = t('title');
     this.syncControls();
     this.syncRejoin();
+    this.syncCoins();
+    this.shopUI.refresh();
     if (this.mode === 'lobby') this.renderLobby(this.lobbyPlayers);
+  }
+
+  // ---------------------------------------------------------------- shop
+
+  /** What we wear and the item we bring into the next game. */
+  private gear(): Gear {
+    return { l: { ...this.shop.look }, i: this.shop.carry };
+  }
+
+  private syncCoins(): void {
+    $('menuCoins').textContent = `🪙 ${this.shop.coins}`;
+  }
+
+  /** Bought, put on or chose an item: save, and tell the room if we are in one. */
+  private shopChanged(): void {
+    saveShop(this.shop);
+    this.syncCoins();
+    if (this.net?.kind === 'client') this.net.client.setGear(this.gear());
+    if (this.net?.kind === 'host') this.net.host.setOwnGear(this.gear());
   }
 
   private syncControls(): void {
@@ -898,6 +947,7 @@ class App {
     mark('segCtlMode', this.settings.ctlMode);
     mark('segVibrate', this.settings.vibrate ? 'on' : 'off');
     mark('segTips', this.settings.tips ? 'on' : 'off');
+    mark('segShopItems', this.settings.shopItems ? 'on' : 'off');
     $('rowVibrate').hidden = !('vibrate' in navigator);
     $<HTMLInputElement>('inpSens').value = String(this.settings.sensitivity);
     $<HTMLInputElement>('inpSens2').value = String(this.settings.sensitivity);
@@ -978,6 +1028,15 @@ class App {
       else if (this.mode === 'paused') this.resume();
     });
     on('btnBoardClose', () => this.show('menu'));
+    on('btnShop', () => {
+      this.show('shopScreen');
+      this.shopUI.open();
+    });
+    on('btnShopClose', () => {
+      this.shopUI.close();
+      this.syncCoins();
+      this.show('menu');
+    });
     on('hudPause', () => this.pause());
     on('btnResume', () => this.resume());
     on('btnQuit', () => this.toMenu());
@@ -1021,6 +1080,10 @@ class App {
       this.settings.tips = true;
       this.save();
       $('btnTipsReset').textContent = t('tipsReset');
+    });
+    seg('segShopItems', (v) => {
+      this.settings.shopItems = v === 'on';
+      if (this.net?.kind === 'host') this.net.host.shopItems = this.settings.shopItems;
     });
     seg('segTips', (v) => {
       this.settings.tips = v === 'on';

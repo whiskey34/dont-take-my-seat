@@ -102,6 +102,17 @@ export const CONFIG = {
     allCaught: 50, // everyone taken off by officers: the game starts over and each player loses this
   },
 
+  /** Shop items: a bit weaker than the floor items, so skill still decides. */
+  item: {
+    jumboImpulse: 1.8, // push strength multiplier
+    jumboStun: 2.2, // daze multiplier
+    shoulderRange: 1.6,
+    shoulderImpulse: 6,
+    shoesTime: 2.5, // sprint (same speed as the iced coffee, half as long)
+    bagTime: 1.5, // seat bag holds the seat this long
+    bagRange: 2.2, // the seat must be this close
+  },
+
   powerUp: {
     pickRange: 0.6,
     shieldTime: 4,

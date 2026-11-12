@@ -10,6 +10,7 @@ export class Controls {
   private origin = { x: 0, y: 0 };
   private keys = new Set<string>();
   private actionQueued = false;
+  private itemQueued = false;
   private radius = 56;
   private reach = 1; // stick travel for full speed, relative to the drawn stick size
   private fixed = false; // stick stays in its spot instead of jumping to the thumb
@@ -23,7 +24,12 @@ export class Controls {
     private readonly base: HTMLElement,
     private readonly knob: HTMLElement,
     actionButton: HTMLElement,
+    itemButton?: HTMLElement,
   ) {
+    itemButton?.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      this.itemQueued = true;
+    });
     zone.addEventListener('pointerdown', this.onDown);
     window.addEventListener('pointermove', this.onMove);
     window.addEventListener('pointerup', this.onUp);
@@ -46,6 +52,7 @@ export class Controls {
         this.actionQueued = true;
         e.preventDefault();
       }
+      if (e.code === 'KeyE' || e.code === 'KeyK') this.itemQueued = true;
       this.keys.add(e.code);
     }, true);
     window.addEventListener('keyup', (e) => {
@@ -81,8 +88,10 @@ export class Controls {
     if (k.has('KeyW') || k.has('ArrowUp')) y -= 1;
     if (k.has('KeyS') || k.has('ArrowDown')) y += 1;
     const action = this.actionQueued;
+    const useItem = this.itemQueued;
     this.actionQueued = false;
-    return { moveX: clamp(x), moveZ: clamp(y), action };
+    this.itemQueued = false;
+    return { moveX: clamp(x), moveZ: clamp(y), action, useItem };
   }
 
   /** Fixed stick (stays in its spot) or floating (jumps to where the thumb lands). */
@@ -102,6 +111,7 @@ export class Controls {
     this.release();
     this.keys.clear();
     this.actionQueued = false;
+    this.itemQueued = false;
   }
 
   private onDown = (e: PointerEvent) => {

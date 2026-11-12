@@ -150,3 +150,13 @@ Safari mengabaikan `user-scalable=no`, jadi game dulu bisa ikut ter-zoom dan ter
 | `?worker=https://…workers.dev` | Pakai Worker ini untuk kode room dan TURN (mengganti `VITE_SIGNAL_URL`) |
 | `?signal=local` | Kode room lewat antar tab (tanpa internet), untuk tes WebRTC di satu browser |
 | `?mock=messenger&user=u1` | Messenger tiruan (`u1` = host, `u2`–`u4` = peserta) |
+
+
+## Shop: TokopaEdi (`src/shop/`, `src/ui/shop.ts`, `src/render/outfit.ts`)
+
+- **Koin** (`shop/wallet.ts`, localStorage `dtms.shop.v1`): terpisah dari poin, tidak pernah berkurang karena penalti. Didapat di layar juara: `floor(poin game ini / 5)` + bonus juara 1/2/3 (10/5/2). Data rusak di storage dibuang saat dimuat.
+- **Katalog** (`shop/catalog.ts`, data murni): 24 aksesoris dalam 4 slot (kepala, badan, wajah, punggung), harga 30–70 koin, dan 5 item. `cleanLook`/`isItemKind` dipakai untuk memvalidasi data dari jaringan.
+- **Aksesoris** murni hiasan. `dress()` memasang model low-poly ke karakter; tanpa kaos, karakter memakai warna pemain. Topi yang menutup kepala menyembunyikan rambut; tas punggung dilepas saat duduk. Bot memakai pakaian acak (`randomLook`).
+- **Cincin identitas**: setiap pemain punya cincin warnanya di bawah kaki (warna kaos bisa bebas); cincin milik sendiri bertepi putih.
+- **Item** (`ItemKind` di core, `CONFIG.item`): pemain membawa **1 item** per game (`PlayerSetup.item` → `Player.item`), dipakai sekali lewat tombol item / tombol E (`PlayerInput.useItem`, pesan `use`). `jumboPack` (dorongan berikutnya 1,8×, pusing 2,2×), `shoulder` (dorong semua yang berdiri dalam 1,6 m), `runShoes` (lari cepat 2,5 dtk), `seatBag` (kursi biasa terdekat ≤2,2 m hanya bisa kamu duduki selama 1,5 dtk), `ginger` (kebal ompreng MBG dan lantai becek sampai game selesai). Earphone menangkal ransel jumbo dan dorongan bahu. Item yang tidak terpakai tetap di tas; yang terpakai dikurangi saat event `itemUsed`.
+- **Room**: aksesoris dan item dikirim di `hello` (`g: { l, i }`), host menaruhnya di setup game. Pengaturan host **Item toko di room-ku** (`settings.shopItems`) mematikan item (aksesoris tetap tampil). Snapshot membawa item, flag jumbo/jahe, dan tas di kursi (`bag`), protokol v13.

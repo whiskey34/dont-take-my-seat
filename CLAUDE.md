@@ -2,7 +2,7 @@
 
 Dibaca otomatis di setiap sesi baru. **Isi file ini lebih baru daripada skill `dont-take-my-seat-dev`**. Kalau keduanya bertentangan, ikuti file ini dan `docs/ARCHITECTURE.md`.
 
-Terakhir diperbarui: 11 November 2026, versi **0.20.0**, protokol **v12**.
+Terakhir diperbarui: 11 November 2026, versi **0.21.0**, protokol **v13**.
 
 ## Pengguna
 
@@ -18,11 +18,11 @@ Terakhir diperbarui: 11 November 2026, versi **0.20.0**, protokol **v12**.
 | Signaling hanya MQTT | **Cloudflare Worker** (`worker/`, WebSocket `/room/<topik>`, Durable Object) + MQTT + Nostr bersamaan (`src/net/signal/roomSignaling.ts`, `relayLink.ts` menyambung ulang sendiri) |
 | Belum ada TURN | **Cloudflare TURN** dari Worker `/turn` (`src/net/rtc/ice.ts`). URL Worker lewat variabel repo `SIGNAL_URL` → `VITE_SIGNAL_URL`, atau `?worker=URL` |
 | Pemain terputus diganti bot | **Room tanpa bot.** Pemain terputus tetap diam ("Terputus") dan bisa **Gabung lagi** dengan `playerKey` (`src/net/playerKey.ts`). Min 2 pemain |
-| `PROTOCOL_VERSION` 2 | **12** (`src/net/protocol.ts`) |
+| `PROTOCOL_VERSION` 2 | **13** (`src/net/protocol.ts`) |
 | Host keluar = room selesai | **Host pindah** ke pemain berikutnya dengan kode room yang sama (lihat ARCHITECTURE, *Keluar dan bergabung lagi*) |
 | 3 challenge, 2 power-up | Lihat daftar di bawah |
 
-## Gameplay saat ini (v0.20.0)
+## Gameplay saat ini (v0.21.0)
 
 - Perjalanan nyata Commuter Line Bogor (+ cabang Nambo), 8 stasiun acak per game (`pickRoute`, `BOGOR_LINE`, `NAMBO_BRANCH` di `config.ts`).
 - Kursi makin sedikit (`CONFIG.seats`): stop 1–2 lebih banyak dari pemain, stop 3–4 kurang satu, stop 5+ kurang dua, stasiun terakhir cuma 1 kursi.
@@ -33,6 +33,7 @@ Terakhir diperbarui: 11 November 2026, versi **0.20.0**, protokol **v12**.
 - **Menendang penumpang NPC yang duduk**: pertama −20 poin, kedua kali petugas KRL membawamu keluar (gugur). Ada model petugas, animasi, peluit. **Kalau semua pemain dibawa petugas**: game langsung mulai lagi dari stasiun pertama (rute sama) dan tiap pemain −50 poin (`CONFIG.points.allCaught`, tidak di bawah 0).
 - **Item di lantai, 1–3 per stop** (`POWER_UP_KINDS`): `earphones` (kebal dorong 4 dtk), `sleep` (aman sekali di kursi prioritas), `coffee` (es kopi, 1,4× cepat 5 dtk), `mbg` (ompreng MBG basi: hijau dan lambat 5 dtk, membatalkan kopi).
 - **Poin**: +10 per stasiun duduk, +5 per tendangan, +50 menang. Game selesai saat tinggal 1 pemain → **popup juara** (daftar, Juara 1 paling atas dengan medali 🥇🥈🥉, tanpa podium; confetti) dengan tombol **Lanjutkan**/**Keluar**, tanpa timer (di room hanya host yang melanjutkan); poin terbawa.
+- **Shop "TokopaEdi"** (tombol menu "Shop", logo toko sendiri, tanpa promo, tanpa aksesoris gratis): **koin** dari main (terpisah dari poin), 24 **aksesoris** hiasan (topi, kaos, wajah, tas) dengan pratinjau 3D, **cincin identitas** warna pemain di bawah kaki, 5 **item** sekali pakai (ransel jumbo, dorongan bahu, sepatu lari, taruh tas di kursi, permen jahe), **bawa 1 per game**, pengaturan host "Item toko di room-ku". Lihat ARCHITECTURE, *Shop*.
 - **Papan peringkat** lewat Worker `/scores` (`src/net/leaderboard.ts`).
 - **Host keluar → pemain berikutnya jadi host** (notifikasi 👑, kode sama, poin terbawa). HP host mati → pengganti ambil alih setelah 8 dtk. **Gabung lagi** ke room kosong → dibuka lagi sebagai host (10 dtk).
 - Karakter chibi bulat, animasi tendang, bintang pusing. **Tips nyala secara default, tiap tips sekali di awal** (`settings.tipsDone`; pengaturan Tips Nyala/Mati dan tombol Tampilkan tips lagi).
@@ -64,7 +65,7 @@ Cek browser dengan Playwright sesuai skill (viewport 844×390, `?signal=local` u
 - Integrasi chat app pengguna (Kotlin + Capacitor/Ionic) masih menunggu akses kodenya; SDK siap di `messenger-sdk/`. Repo `whiskey34/chat-app` BUKAN chat app itu.
 - Host pindah: game yang sedang berjalan belum dilanjutkan di host baru (semua kembali ke lobby). Bisa dikembangkan dengan mengirim state lengkap ke pengganti.
 - Lag P2P: usulan bertahap: (1) ukur di `?debug` (ukuran snapshot, upload host, TURN atau tidak), (2) snapshot biner + delta, (3) server game di Durable Object (simulasi `src/core` di server, P2P tetap sebagai cadangan). Menunggu keputusan pengguna.
-- **Shop (disepakati 12 Nov, sedang dikerjakan)**: popup berjudul **"TokopaEdi"** (tombol menu tetap "Shop"), logo toko sendiri (tanpa unsur Tokopedia), **tanpa promo, tanpa aksesoris gratis**. Mata uang **Koin** terpisah dari poin (dari main, tidak berkurang karena penalti). Aksesoris murni hiasan dengan slot (kepala/topi, badan/kaos warna, wajah, punggung), pratinjau karakter, terlihat di room. Warna identitas pemain dipindah ke **cincin** di bawah kaki + label nama, kaos bebas warna. Item gameplay sekali pakai: **bawa 1 per game**, tombol item, tiap item punya penangkal, efek sedikit lebih lemah dari item lantai, pengaturan room "Tanpa item toko". Penyimpanan tahap awal di localStorage (nanti di server).
+- Shop: penyimpanan koin/barang masih di localStorage (bisa diakali, hilang kalau cache dihapus); pindah ke server bersamaan dengan server game.
 - Ide yang belum dibuat: mode QR tanpa internet, gabung otomatis dari tautan `?join=KODE`, kursi palsu (tas), kursi diumumkan telat, Manggarai chaos.
 - Keseimbangan: rata-rata game ~25–30 detik, bot jangan terlalu cepat. Setelah ubah gameplay, jalankan simulasi 200 game bot (selalu satu pemenang, tanpa kursi ganda).
 
@@ -78,6 +79,7 @@ Cek browser dengan Playwright sesuai skill (viewport 844×390, `?signal=local` u
 - 11 Nov (v0.17.0): host pindah otomatis ke pemain berikutnya, room kosong bisa dibuka lagi lewat Gabung lagi, tips kembali sekali di awal (tetap default nyala).
 - 11 Nov (v0.18.0): popup juara dengan confetti, tombol Lanjutkan tanpa hitung mundur otomatis.
 - 11 Nov (v0.18.1): podium diganti daftar (Juara 1 paling atas).
+- 12 Nov (v0.21.0): shop TokopaEdi: koin, aksesoris, cincin identitas, 5 item gameplay (bawa 1 per game), opsi room tanpa item.
 - 12 Nov (v0.20.0): NPC berdiri ikut berebut kursi (opsi A: tiap pemburu menambah 1 kursi), lansia ke kursi prioritas, bisa didorong.
 - 11 Nov (v0.19.0): semua pemain tertangkap petugas → tidak freeze lagi, game mulai dari awal dengan −50 poin. (Dibahas juga: server game di Durable Object untuk mengurangi lag P2P; belum dikerjakan, menunggu keputusan pengguna soal jumlah pemain dan paket berbayar Cloudflare.)
 
