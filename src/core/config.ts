@@ -54,6 +54,16 @@ export const CONFIG = {
     boardingCount: 3,
     standerRadius: 0.3,
     standerSpeed: 0.8,
+    // Seat hunters: standing passengers who also race for a seat (never at the last stop).
+    // Every hunter brings one extra open seat, so they make it a race, not fewer seats.
+    hunters: [1, 2] as const, // per stop, min-max
+    huntersRush: [2, 3] as const, // in rush hour
+    hunterSpeed: 3.8, // a little slower than players (4.2)
+    elderSpeed: 2.5,
+    elderChance: 0.35, // one of them may be elderly, heading for a priority seat
+    hunterReaction: [0.3, 0.7] as const, // seconds after the doors open
+    hunterStun: 1.1, // dazed after a push
+    hunterKnock: 4.5, // push knock-back speed
     // Kick fight: kick a seated player off their seat (from in front of it).
     kickRange: 0.85,
     kickStun: 0.9,

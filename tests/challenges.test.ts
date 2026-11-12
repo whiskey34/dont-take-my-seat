@@ -54,7 +54,7 @@ describe('station challenges', () => {
 
   it('standing passengers block the aisle', () => {
     const s = gameWith('crowd');
-    expect(s.standers).toHaveLength(CONFIG.challenge.crowdCount);
+    expect(s.standers.filter((st) => !st.hunt)).toHaveLength(CONFIG.challenge.crowdCount);
     const a = s.players[0]!;
     const st = s.standers[0]!;
     // Walk straight into a passenger for a while.
@@ -71,10 +71,11 @@ describe('station challenges', () => {
     const s = gameWith('oneSideDoors');
     expect(s.doorSide === 1 || s.doorSide === -1).toBe(true);
     runUntil(s, (x) => x.phase === 'scramble');
-    expect(s.standers).toHaveLength(CONFIG.challenge.boardingCount);
-    for (const st of s.standers) expect(Math.sign(st.pos.z)).toBe(s.doorSide);
+    expect(s.standers.filter((st) => !st.hunt)).toHaveLength(CONFIG.challenge.boardingCount);
+    const boarded = s.standers.filter((st) => !st.hunt);
+    for (const st of boarded) expect(Math.sign(st.pos.z)).toBe(s.doorSide);
     runUntil(s, (x) => x.time > x.phaseEndsAt - 6);
-    for (const st of s.standers) expect(Math.abs(st.target.z)).toBeLessThanOrEqual(0.36);
+    for (const st of boarded) expect(Math.abs(st.target.z)).toBeLessThanOrEqual(0.36);
   });
 
   it('clears challenges when the next stop starts', () => {
@@ -85,7 +86,7 @@ describe('station challenges', () => {
     step(s, new Map([['a', press]]), DT);
     runUntil(s, (x) => x.phase === 'riding' && x.round === 1);
     expect(s.standers.every((st) => st.id > 0)).toBe(true);
-    if (s.challenge !== 'crowd') expect(s.standers).toHaveLength(0);
+    if (s.challenge !== 'crowd') expect(s.standers.filter((st) => !st.hunt)).toHaveLength(0);
   });
 });
 

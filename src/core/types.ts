@@ -83,6 +83,19 @@ export interface Stander {
   pos: Vec2;
   target: Vec2;
   moveAt: number;
+  /** A seat hunter: this passenger also races for a seat when the doors open. */
+  hunt?: Hunt;
+}
+
+export interface Hunt {
+  /** Elderly passenger: slower, heads for a priority seat (which is theirs to keep). */
+  elder: boolean;
+  /** Starts running this long after the doors open (set when they open). */
+  startAt: number;
+  /** Pushed: dazed until then. */
+  stunUntil: number;
+  /** Knock-back from a push. */
+  vel: Vec2;
 }
 
 export interface PowerUp {
@@ -133,6 +146,10 @@ export type GameEvent =
   | { type: 'replay' }
   /** Everyone was taken off the train: the game starts over from the first station. */
   | { type: 'restart'; penalty: number }
+  /** A seat-hunting passenger sat down. */
+  | { type: 'npcSat'; seatId: number }
+  /** A player pushed a seat-hunting passenger. */
+  | { type: 'npcPushed'; by: PlayerId }
   | { type: 'winner'; playerId: PlayerId }
   | { type: 'challenge'; kind: ChallengeKind }
   | { type: 'suddenBrake' }

@@ -76,7 +76,7 @@ describe('rush hour', () => {
     }
     expect(s).not.toBeNull();
     const g = s!;
-    expect(g.standers).toHaveLength(C.rushCount);
+    expect(g.standers.filter((st) => !st.hunt)).toHaveLength(C.rushCount);
     for (const st of g.standers) expect(Math.abs(st.pos.z)).toBeLessThanOrEqual(C.rushLane + 1e-6);
     // Walk the length of the car: you get through, but slower than on an empty aisle.
     const a = g.players[0]!;
@@ -113,6 +113,7 @@ describe('moving priority seat', () => {
     const seat = s.seats[m.seatIds[0]!]!;
     const a = s.players[0]!;
     a.pos = seatFront(seat);
+    a.sleeping = false; // no "pretend to sleep" item
     const ev = runUntil(s, (x) => x.players[0]!.seatId !== null, new Map([['a', press]]));
     expect(ev.some((e) => e.type === 'sat' && e.playerId === 'a')).toBe(true);
     const all = runUntil(s, (x) => x.seatMove!.done);

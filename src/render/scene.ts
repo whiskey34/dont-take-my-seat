@@ -449,6 +449,19 @@ export class TrainScene {
         const target = state.players.find((p) => p.id === e.target);
         if (target) this.pulse(target.pos.x, target.pos.z, '#ffffff');
       }
+      if (e.type === 'npcSat') {
+        const seat = state.seats[e.seatId];
+        if (seat) {
+          const sit = seatSitPos(seat);
+          this.pulse(sit.x, sit.z, '#9aa4ae');
+          const fig = this.npcs[seat.id];
+          if (fig && seat.priority) setHair(fig, SCENE.elderHair);
+        }
+      }
+      if (e.type === 'npcPushed') {
+        const p = state.players.find((q) => q.id === e.by);
+        if (p) this.pulse(p.pos.x, p.pos.z, '#ffffff');
+      }
       if (e.type === 'slipped') {
         const who = state.players.find((p) => p.id === e.playerId);
         if (who) this.pulse(who.pos.x, who.pos.z, SCENE.puddle);
@@ -858,7 +871,8 @@ export class TrainScene {
       seen.add(st.id);
       let fig = this.standers.get(st.id);
       if (!fig) {
-        fig = createFigure(SCENE.npcBodies[st.id % SCENE.npcBodies.length]!, npcSkin(st.id + 3), st.id % 2 === 0, st.id * 3 + 2);
+        fig = createFigure(SCENE.npcBodies[st.id % SCENE.npcBodies.length]!, npcSkin(st.id + 3), st.id % 2 === 0, st.hunt?.elder ? 0 : st.id * 3 + 2);
+        if (st.hunt?.elder) setHair(fig, SCENE.elderHair);
         fig.root.position.set(st.pos.x, 0, st.pos.z);
         this.scene.add(fig.root);
         this.standers.set(st.id, fig);

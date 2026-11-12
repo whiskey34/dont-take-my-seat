@@ -336,6 +336,7 @@ class App {
     for (const e of events) {
       if (e.type === 'doorsOpen') play('chime');
       if (e.type === 'pushed' && (e.by === me || e.target === me)) play('push');
+      if (e.type === 'npcPushed' && e.by === me) play('push');
       if (e.type === 'sat' && e.playerId === me) {
         play('sit');
         this.buzz(15);

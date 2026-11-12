@@ -1,4 +1,4 @@
-import { boardPassengers, collectPowerUps, isShielded, keepOutOfStanders, startChallenge, updateChallenge } from './challenges';
+import { boardPassengers, collectPowerUps, hunterInReach, hunterSeats, isShielded, keepOutOfStanders, pushHunter, startChallenge, updateChallenge } from './challenges';
 import { BOGOR_LINE, CONFIG, NAMBO_BRANCH, ROUTE_LENGTH } from './config';
 import { createSeats, POLES, seatFront, seatSitPos } from './layout';
 import { nextRandom, pickDistinct } from './rng';
@@ -244,7 +244,8 @@ export function seatsThisStop(s: GameState): number {
 }
 
 function openDoors(s: GameState, events: GameEvent[]): void {
-  const needed = seatsThisStop(s);
+  // Every seat hunter brings an extra seat: they make it a race, not a shortage.
+  const needed = seatsThisStop(s) + hunterSeats(s);
   const normal = s.seats.filter((seat) => !seat.priority).map((seat) => seat.id);
   const priority = s.seats.filter((seat) => seat.priority).map((seat) => seat.id);
   const [free, r1] = pickDistinct(normal, needed, s.rngState);
@@ -322,7 +323,7 @@ function updateSeatMove(s: GameState, events: GameEvent[]): void {
 /** Nothing left to decide: every open seat is taken, or every player sits. */
 function allFreeSeatsTaken(s: GameState): boolean {
   if (s.freeSeatIds.length === 0) return false;
-  const full = s.freeSeatIds.every((id) => s.seats[id]?.playerId !== null);
+  const full = s.freeSeatIds.every((id) => s.seats[id]?.playerId !== null || s.seats[id]?.npc === true);
   const everyoneSits = alivePlayers(s).every((p) => p.seatId !== null && p.kickAt === null);
   return full || everyoneSits;
 }
@@ -428,9 +429,21 @@ function handleAction(s: GameState, p: Player, input: PlayerInput, events: GameE
   const victim = seatKickTarget(s, p);
   if (victim) return kickOffSeat(s, p, victim, events);
   const target = pushTarget(s, p);
+  const hunter = hunterInReach(s, p);
+  const dTarget = target ? dist(p.pos, target.pos) : Infinity;
+  const dHunter = hunter ? hunter.d : Infinity;
   // Kicking a seated passenger: only when nobody standing is closer to push.
   const npcSeat = npcKickSeat(s, p);
-  if (npcSeat && (!target || dist(p.pos, seatFront(npcSeat)) < dist(p.pos, target.pos))) return kickNpc(s, p, npcSeat, events);
+  if (npcSeat && dist(p.pos, seatFront(npcSeat)) < Math.min(dTarget, dHunter)) return kickNpc(s, p, npcSeat, events);
+  if (hunter && dHunter < dTarget) {
+    // Pushing a passenger who races for a seat.
+    const dir = { x: hunter.st.pos.x - p.pos.x, z: hunter.st.pos.z - p.pos.z };
+    p.pushReadyAt = s.time + PUSH.cooldown;
+    p.facing = Math.atan2(dir.x, dir.z);
+    pushHunter(s, hunter.st, dir);
+    events.push({ type: 'npcPushed', by: p.id });
+    return;
+  }
   if (!target) return;
   const dx = target.pos.x - p.pos.x;
   const dz = target.pos.z - p.pos.z;

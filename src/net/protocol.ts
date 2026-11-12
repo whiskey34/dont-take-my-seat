@@ -1,7 +1,7 @@
-import { ALL_CHALLENGES, POWER_UP_KINDS, type ChallengeKind, type GameEvent, type GameState, type Phase, type Player, type PlayerSetup, type PowerUpKind, type Seat } from '../core/types';
+import { ALL_CHALLENGES, POWER_UP_KINDS, type ChallengeKind, type GameEvent, type GameState, type Phase, type Player, type PlayerSetup, type PowerUpKind, type Seat, type Stander } from '../core/types';
 
 /** Bump when messages change incompatibly; peers with another version are refused. */
-export const PROTOCOL_VERSION = 11;
+export const PROTOCOL_VERSION = 12;
 export const MAX_NAME = 14;
 
 export interface LobbyPlayer {
@@ -55,7 +55,8 @@ export interface Snapshot {
   /** [playerId, last movement input seq the host has applied] for client reconciliation. */
   ack: Array<[string, number]>;
   /** Standing passengers [id, x, z] and power-ups [id, kind, x, z]. */
-  st: Array<[number, number, number]>;
+  /** Standing passengers: [id, x, z, flags] (flags: 1 seat hunter, 2 elderly, 4 dazed by a push). */
+  st: Array<[number, number, number, number]>;
   pu: Array<[number, PowerUpKind, number, number]>;
   /** One char per seat: '0' empty, '1' NPC. */
   npc: string;
@@ -106,7 +107,7 @@ export function packSnapshot(s: GameState, offline: Iterable<string> = [], acks:
     ch: s.challenge ?? '',
     bk: r3(s.brakeUntil),
     ds: s.doorSide,
-    st: s.standers.map((x) => [x.id, r3(x.pos.x), r3(x.pos.z)]),
+    st: s.standers.map((x) => [x.id, r3(x.pos.x), r3(x.pos.z), x.hunt ? 1 | (x.hunt.elder ? 2 : 0) | (s.time < x.hunt.stunUntil ? 4 : 0) : 0]),
     pu: s.powerUps.map((u) => [u.id, u.kind, r3(u.pos.x), r3(u.pos.z)]),
     npc: s.seats.map((x) => (x.npc ? '1' : '0')).join(''),
     occ: s.seats.filter((x) => x.playerId !== null).map((x) => [x.id, x.playerId as string]),
@@ -143,7 +144,11 @@ export function applySnapshot(s: GameState, snap: Snapshot): void {
   s.brakeUntil = snap.bk;
   s.doorSide = snap.ds;
   // Standers only need a position on clients; their next move comes from the host.
-  s.standers = snap.st.map(([id, x, z]) => ({ id, pos: { x, z }, target: { x, z }, moveAt: Infinity }));
+  s.standers = snap.st.map(([id, x, z, f]) => {
+    const st: Stander = { id, pos: { x, z }, target: { x, z }, moveAt: Infinity };
+    if (f & 1) st.hunt = { elder: (f & 2) !== 0, startAt: 0, stunUntil: f & 4 ? s.time + 0.2 : 0, vel: { x: 0, z: 0 } };
+    return st;
+  });
   s.powerUps = snap.pu.map(([id, kind, x, z]) => ({ id, kind, pos: { x, z } }));
   s.puddles = snap.pd.map(([x, z, r]) => ({ x, z, r }));
   const [at, warned, done, ...ids] = snap.sm;
@@ -262,7 +267,7 @@ function isSnapshot(v: unknown): v is Snapshot {
   if (!v.p.every((row) => Array.isArray(row) && row.length === 19 && isStr(row[0]) && row.slice(1).every(isNum))) return false;
   if (v.ch !== '' && !ALL_CHALLENGES.includes(v.ch as ChallengeKind)) return false;
   if (!isNum(v.bk) || (v.ds !== -1 && v.ds !== 0 && v.ds !== 1)) return false;
-  if (!Array.isArray(v.st) || v.st.length > 30 || !v.st.every((r) => Array.isArray(r) && r.length === 3 && r.every(isNum))) return false;
+  if (!Array.isArray(v.st) || v.st.length > 30 || !v.st.every((r) => Array.isArray(r) && r.length === 4 && r.every(isNum))) return false;
   if (!Array.isArray(v.off) || v.off.length > 4 || !v.off.every((x) => isStr(x))) return false;
   if (!Array.isArray(v.pd) || v.pd.length > 8 || !v.pd.every((r) => Array.isArray(r) && r.length === 3 && r.every(isNum))) return false;
   if (typeof v.pr !== 'string' || v.pr.length > 200) return false;
@@ -299,6 +304,10 @@ function isEvent(e: unknown): e is GameEvent {
       return true;
     case 'restart':
       return isInt(e.penalty);
+    case 'npcSat':
+      return isInt(e.seatId);
+    case 'npcPushed':
+      return isStr(e.by);
     case 'winner':
     case 'shielded':
       return isStr(e.playerId);
