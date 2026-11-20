@@ -1,5 +1,5 @@
 import { CONFIG } from '../core/config';
-import { canUseItem, isFinalStop, kickBeatsSitting, npcKickSeat, pushTarget, seatInReach, seatKickTarget, trainAccel } from '../core/game';
+import { canUseItem, isFinalStop, planAction, trainAccel } from '../core/game';
 import type { GameEvent, GameState, Player } from '../core/types';
 import { t } from '../i18n';
 import { PLAYER_COLORS } from '../render/palette';
@@ -173,7 +173,7 @@ export class Hud {
           break;
         case 'seatKick': {
           const name = (id: string) => state.players.find((p) => p.id === id)?.name ?? id;
-          if (e.by === me) this.flash(t('youKicked', { name: name(e.target), n: CONFIG.points.kick }), 'good', 1600);
+          if (e.by === me) this.flash(state.challenge === 'kickFight' ? t('youKicked', { name: name(e.target), n: CONFIG.points.kick }) : t('youKickedPlain', { name: name(e.target) }), 'good', 1600);
           else if (e.target === me) this.flash(t('gotKicked', { name: name(e.by) }), 'bad', 1600);
           break;
         }
@@ -321,17 +321,17 @@ export class Hud {
     const active = !!me && !me.eliminated && me.seatId === null && (state.phase === 'riding' || state.phase === 'scramble');
     this.actionBtn.classList.toggle('hidden', !active);
     if (!me || !active) return;
-    const free = seatInReach(state, me);
-    const kickFirst = !!free && kickBeatsSitting(state, me, free);
-    const canSit = !!free && !kickFirst;
-    const canKick = !canSit && (!!seatKickTarget(state, me) || (!!npcKickSeat(state, me) && !pushTarget(state, me)));
+    // The label says what a tap would really do right now (the game uses the same plan).
+    const plan = planAction(state, me);
+    const canSit = plan?.kind === 'sit';
+    const canKick = plan?.kind === 'kick' || plan?.kind === 'npcKick';
     this.actionBtn.classList.toggle('sit', canSit);
     this.actionBtn.classList.toggle('kick', canKick);
-    this.actionLabel.textContent = canSit ? t('sit') : canKick || state.challenge === 'kickFight' ? t('kick') : t('push');
+    this.actionLabel.textContent = canSit ? t('sit') : canKick ? t('kick') : t('push');
     const full = me.pushReadyAt - state.time > CONFIG.push.cooldown ? CONFIG.challenge.kickCooldown : CONFIG.push.cooldown;
     const cooldownLeft = Math.max(0, me.pushReadyAt - state.time) / full;
     const cooling = !canSit && cooldownLeft > 0;
-    this.actionBtn.classList.toggle('cooling', cooling || (!canSit && !canKick && !pushTarget(state, me)));
+    this.actionBtn.classList.toggle('cooling', cooling || !plan);
     if (this.actionRing) this.actionRing.style.strokeDashoffset = String(289 * (1 - (cooling ? cooldownLeft : 0)));
   }
 }

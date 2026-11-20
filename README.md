@@ -22,15 +22,15 @@ Detail teknis ada di [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 ## Cara main
 
 - Gerak: joystick di sisi kiri layar (atau WASD / panah).
-- Aksi: tombol kanan. Berubah jadi **DUDUK** di dekat kursi kosong, **TENDANG** saat adu tendang, selain itu **DORONG**.
+- Aksi: tombol kanan. Tulisannya selalu sesuai dengan yang akan terjadi: **DUDUK** di dekat kursi kosong, **TENDANG** di depan pemain yang duduk (semua stasiun, selama pintu terbuka), selain itu **DORONG**.
 - Kursi merah adalah kursi prioritas: kalau diduduki, kamu akan diminta berdiri.
 - **Challenge acak di setiap stasiun**, diumumkan di papan stasiun:
   - **Rem mendadak:** kereta tersentak sekali; siapa pun yang sedang diam akan oleng.
   - **Penumpang berdiri:** penumpang di lorong menghalangi jalan dan sesekali bergeser.
   - **Pintu satu sisi:** hanya pintu kiri atau kanan yang terbuka, dan penumpang baru masuk lalu berdiri di lorong sisi itu.
-  - **Adu tendang:** berdiri di depan pemain yang duduk lalu tekan **TENDANG** untuk menendangnya dari kursi (earphone menahan tendangan). Waktu rebutan berjalan penuh karena kursi bisa berpindah tangan.
+  - **Adu tendang:** pintu terbuka sampai waktu habis (kursi bisa terus berpindah tangan) dan tiap tendangan ke pemain yang duduk memberi +5 poin. Menendang pemain sendiri bisa di semua stasiun; earphone menahan tendangan, dan yang baru duduk aman setengah detik.
   - **Lantai becek:** genangan air di lantai; lari ke genangan dan kamu terpeleset, terlempar cukup jauh dan tidak bisa dikendalikan sebentar. Jalan pelan aman.
-- **Poin:** +10 setiap stasiun kamu tetap duduk, +5 setiap tendangan, +50 kalau menang. Game selesai saat tinggal satu pemain: muncul daftar juara (🥇 Juara 1 paling atas, lalu 🥈, 🥉, dan posisi lainnya) dengan confetti. Tekan **Lanjutkan** untuk game berikutnya (poin terus bertambah) atau **Keluar**; tidak ada hitung mundur. Di room, host yang menekan Lanjutkan untuk semua pemain.
+- **Poin:** +10 setiap stasiun kamu tetap duduk, +5 setiap tendangan saat adu tendang, +50 kalau menang. Game selesai saat tinggal satu pemain: muncul daftar juara (🥇 Juara 1 paling atas, lalu 🥈, 🥉, dan posisi lainnya) dengan confetti. Tekan **Lanjutkan** untuk game berikutnya (poin terus bertambah) atau **Keluar**; tidak ada hitung mundur. Di room, host yang menekan Lanjutkan untuk semua pemain.
 
 **Shop (TokopaEdi):** kumpulkan koin dari setiap game (1 koin per 5 poin + bonus juara 1–3). Beli aksesoris untuk gaya (topi dan helm motor, gaya rambut, kaos, masker/kacamata, tas) dan item sekali pakai: Tas Ransel Jumbo, Dorongan Bahu, Sepatu Lari, Taruh Tas di Kursi, Permen Jahe. Bawa 1 item per game, pakai dengan tombol item (atau E). Host room bisa mematikan item toko di Pengaturan.
 - **Power-up di lantai** (satu per stasiun, ambil dengan berjalan di atasnya):

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { botThink, createBrain } from '../src/ai/bot';
 import { CONFIG } from '../src/core/config';
-import { alivePlayers, createGame, step } from '../src/core/game';
+import { alivePlayers, createGame, planAction, step } from '../src/core/game';
 import { seatFront, seatSitPos } from '../src/core/layout';
 import type { ChallengeKind, GameEvent, GameState, PlayerInput, PlayerSetup } from '../src/core/types';
 
@@ -102,6 +102,11 @@ describe('kick fight and wet floor', () => {
     expect(a!.seatId).toBe(seat.id);
     b!.pos = { ...seatFront(seat) };
     b!.pushReadyAt = 0;
+    // Just sat down: safe for a moment (a tap meant for that seat must not kick).
+    expect(step(s, new Map([['b', press]]), DT).some((e) => e.type === 'seatKick')).toBe(false);
+    expect(planAction(s, b!)?.kind).not.toBe('kick');
+    for (let i = 0; i < CONFIG.challenge.kickSafe * 60 + 20; i++) step(s, new Map(), DT);
+    expect(planAction(s, b!)?.kind).toBe('kick');
     const ev = step(s, new Map([['b', press]]), DT);
     expect(ev).toContainEqual({ type: 'seatKick', by: 'b', target: 'a', seatId: seat.id });
     expect(ev).toContainEqual({ type: 'points', playerId: 'b', amount: CONFIG.points.kick, reason: 'kick' });
@@ -142,17 +147,158 @@ describe('kick fight and wet floor', () => {
     expect(ev.some((e) => e.type === 'seatKick' && e.target === 'a')).toBe(true);
   });
 
-  it('no kicking off seats outside a kick fight', () => {
-    const s = gameWith('crowd');
+  /** A stop (not a kick fight) with `a` seated among passengers, `b` free to act, nothing else around. */
+  function seatedScene(kind: ChallengeKind = 'crowd') {
+    const s = gameWith(kind);
     runUntil(s, (x) => x.phase === 'scramble');
-    const [a, b] = s.players;
-    const seat = s.seats[s.freeSeatIds[0]!]!;
-    a!.pos = seatFront(seat);
-    step(s, new Map([['a', press]]), DT);
-    b!.pos = { ...seatFront(seat) };
+    s.standers = [];
+    s.powerUps = [];
+    s.phaseEndsAt = s.time + 60;
+    const seat = s.seats.find((x) => !x.priority && x.side > 0 && Math.abs(x.x) < 5 && s.seats.filter((y) => y.side === x.side && !y.priority && Math.abs(y.x - x.x) < 0.9).length === 3)!;
+    for (const x of s.seats) {
+      if (x.priority) continue;
+      x.playerId = null;
+      x.npc = true;
+    }
+    // One free seat far away keeps the doors open.
+    const far = s.seats.find((x) => !x.priority && x.side < 0 && x.x > seat.x + 4)!;
+    far.npc = false;
+    s.freeSeatIds = [seat.id, far.id];
+    seat.npc = false;
+    seat.playerId = 'a';
+    const [a, b, c, d] = s.players as [typeof s.players[0], typeof s.players[0], typeof s.players[0], typeof s.players[0]];
+    a.seatId = seat.id;
+    a.pos = seatSitPos(seat);
+    a.safeUntil = 0;
+    c.pos = { x: -10.5, z: -1 };
+    d.pos = { x: -9.5, z: -1 };
+    b.pushReadyAt = 0;
+    b.stunnedUntil = 0;
+    b.vel = { x: 0, z: 0 };
+    return { s, seat, a, b, c, front: seatFront(seat) };
+  }
+  const types = (ev: GameEvent[]) => ev.map((e) => e.type);
+
+  it('a seated player can be kicked at every stop, but only a kick fight pays for it', () => {
+    const { s, seat, a, b, front } = seatedScene('crowd');
+    b.pos = { ...front };
+    expect(planAction(s, b)?.kind).toBe('kick');
     const ev = step(s, new Map([['b', press]]), DT);
-    expect(ev.some((e) => e.type === 'seatKick')).toBe(false);
-    expect(a!.seatId).toBe(seat.id);
+    expect(ev).toContainEqual({ type: 'seatKick', by: 'b', target: 'a', seatId: seat.id });
+    expect(types(ev)).not.toContain('points');
+    expect(a.seatId).toBeNull();
+    // Now the seat is free: the same button sits.
+    expect(planAction(s, b)?.kind).toBe('sit');
+    step(s, new Map([['b', press]]), DT);
+    expect(b.seatId).toBe(seat.id);
+  });
+
+  it('two players tapping for the same seat at once: one sits, nobody is kicked', () => {
+    const { s, seat, a, b, c, front } = seatedScene();
+    seat.playerId = null;
+    a.seatId = null;
+    a.pos = { ...front };
+    b.pos = { ...front, x: front.x + 0.05 };
+    void c;
+    const ev = step(s, new Map([['a', press], ['b', press]]), DT);
+    expect(types(ev)).not.toContain('seatKick');
+    expect(s.players.filter((p) => p.seatId === seat.id)).toHaveLength(1);
+  });
+
+  it('the kick reaches from the middle of the aisle, and the nearest seated player is the target', () => {
+    const { s, a, b, front } = seatedScene();
+    b.pos = { x: front.x, z: 0.1 }; // just on their side of the centre line
+    expect(planAction(s, b)?.kind).toBe('kick');
+    b.pos = { x: front.x, z: -0.3 }; // on the far side of the aisle: too far
+    expect(planAction(s, b)).toBeUndefined();
+    b.pos = { x: front.x, z: 0.1 };
+    step(s, new Map([['b', press]]), DT);
+    expect(a.seatId).toBeNull();
+  });
+
+  it('a tap that misses the seated player does not kick the passenger next to them', () => {
+    const { s, a, b, front } = seatedScene();
+    // Right in front of the passenger beside the seated player.
+    b.pos = { x: front.x + CONFIG.car.seatWidth + 0.1, z: front.z };
+    expect(planAction(s, b)?.kind).toBe('kick');
+    const ev = step(s, new Map([['b', press]]), DT);
+    expect(types(ev)).not.toContain('npcKick');
+    expect(types(ev)).toContain('seatKick');
+    expect(a.seatId).toBeNull();
+    expect(b.npcStrikes).toBe(0);
+  });
+
+  it('pushes the standing rival when they are nearer than the seated player', () => {
+    const { s, a, b, c, front } = seatedScene();
+    b.pos = { x: front.x + 0.9, z: front.z - 0.3 };
+    c.pos = { x: b.pos.x + 0.5, z: b.pos.z };
+    expect(planAction(s, b)?.kind).toBe('push');
+    const ev = step(s, new Map([['b', press]]), DT);
+    expect(types(ev)).toContain('pushed');
+    expect(a.seatId).not.toBeNull();
+  });
+
+  it('remembers a tap made just before the recharge ends, but not an old one', () => {
+    const late = seatedScene();
+    late.b.pos = { ...late.front };
+    late.b.pushReadyAt = late.s.time + 0.2;
+    expect(types(step(late.s, new Map([['b', press]]), DT))).not.toContain('seatKick');
+    const ev: GameEvent[] = [];
+    for (let i = 0; i < 20; i++) ev.push(...step(late.s, new Map(), DT));
+    expect(types(ev)).toContain('seatKick');
+
+    const early = seatedScene();
+    early.b.pos = { ...early.front };
+    early.b.pushReadyAt = early.s.time + 0.6;
+    step(early.s, new Map([['b', press]]), DT);
+    const ev2: GameEvent[] = [];
+    for (let i = 0; i < 60; i++) ev2.push(...step(early.s, new Map(), DT));
+    expect(types(ev2)).not.toContain('seatKick');
+    expect(early.a.seatId).not.toBeNull();
+  });
+
+  it('remembers a tap made while dazed', () => {
+    const { s, a, b, front } = seatedScene();
+    b.pos = { ...front };
+    b.stunnedUntil = s.time + 0.2;
+    step(s, new Map([['b', press]]), DT);
+    expect(a.seatId).not.toBeNull();
+    for (let i = 0; i < 20; i++) step(s, new Map(), DT);
+    expect(a.seatId).toBeNull();
+  });
+
+  it('a remembered tap never kicks a passenger (that costs points)', () => {
+    const { s, seat, a, b, front } = seatedScene();
+    // No seated player around: only the passenger in front of us.
+    seat.playerId = null;
+    seat.npc = true;
+    a.seatId = null;
+    a.pos = { x: 10.5, z: -1 };
+    b.pos = { ...front };
+    b.pushReadyAt = s.time + 0.2;
+    expect(planAction(s, b)?.kind).toBe('npcKick');
+    const ev = [...step(s, new Map([['b', press]]), DT)];
+    for (let i = 0; i < 40; i++) ev.push(...step(s, new Map(), DT));
+    expect(types(ev)).not.toContain('npcKick');
+    // A tap made once the recharge is over does kick.
+    expect(types(step(s, new Map([['b', press]]), DT))).toContain('npcKick');
+  });
+
+  it('the button label and the game agree everywhere around a seated player', () => {
+    const { s, front } = seatedScene();
+    const json = JSON.stringify(s);
+    const happened: Record<string, string> = { sit: 'sat', kick: 'seatKick', npcKick: 'npcKick', push: 'pushed', pushNpc: 'npcPushed' };
+    for (let dx = -2; dx <= 2; dx += 0.25) {
+      for (let z = -1; z <= 1.06; z += 0.2) {
+        const t = JSON.parse(json) as GameState;
+        const b = t.players[1]!;
+        b.pos = { x: front.x + dx, z };
+        const plan = planAction(t, b);
+        const ev = types(step(t, new Map([['b', press]]), DT));
+        if (plan) expect(ev).toContain(happened[plan.kind]);
+        else expect(ev.filter((e) => Object.values(happened).includes(e))).toEqual([]);
+      }
+    }
   });
 
   it('running onto a puddle makes you slip and shoot off a good way', () => {

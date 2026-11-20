@@ -2,7 +2,7 @@ import { boardPassengers, collectPowerUps, hunterInReach, hunterSeats, isShielde
 import { BOGOR_LINE, CONFIG, NAMBO_BRANCH, ROUTE_LENGTH } from './config';
 import { createSeats, POLES, seatFront, seatSitPos } from './layout';
 import { nextRandom, pickDistinct } from './rng';
-import type { GameEvent, GameState, Phase, Player, PlayerId, PlayerInput, PlayerSetup, Seat, Vec2 } from './types';
+import type { GameEvent, GameState, Phase, Player, PlayerId, PlayerInput, PlayerSetup, Seat, Stander, Vec2 } from './types';
 import { ITEM_KINDS, NO_INPUT } from './types';
 import type { ItemKind } from './types';
 
@@ -31,7 +31,9 @@ export function createGame(setups: readonly PlayerSetup[], seed: number): GameSt
     eliminatedInRound: null,
     stunnedUntil: 0,
     pushReadyAt: 0,
+    tapUntil: 0,
     kickAt: null,
+    safeUntil: 0,
     shieldUntil: 0,
     sleeping: false,
     boostUntil: 0,
@@ -212,6 +214,7 @@ function startRound(s: GameState, events: GameEvent[]): void {
     p.kickAt = null;
     p.vel = { x: 0, z: 0 };
     p.stunnedUntil = 0;
+    p.tapUntil = 0;
     p.shieldUntil = 0;
     p.boostUntil = 0;
     p.slipUntil = 0;
@@ -376,6 +379,7 @@ function restartGame(s: GameState, events: GameEvent[]): void {
     p.eliminatedInRound = null;
     p.stunnedUntil = 0;
     p.pushReadyAt = 0;
+    p.tapUntil = 0;
     p.kickAt = null;
     p.shieldUntil = 0;
     p.sleeping = false;
@@ -410,71 +414,131 @@ function addPoints(p: Player, amount: number, reason: 'round' | 'win' | 'kick' |
 
 // ---------------------------------------------------------------- actions
 
-function handleAction(s: GameState, p: Player, input: PlayerInput, events: GameEvent[]): void {
-  if (!input.action || p.seatId !== null || s.time < p.stunnedUntil) return;
+/** What the action button would do right now (ignoring the recharge time), or undefined when nothing is in reach. */
+export type ActionPlan =
+  | { kind: 'sit'; seat: Seat }
+  | { kind: 'kick'; target: Player }
+  | { kind: 'npcKick'; seat: Seat }
+  | { kind: 'pushNpc'; hunter: Stander }
+  | { kind: 'push'; target: Player };
 
+/**
+ * One place decides what a tap does, so the button label (HUD) and the game
+ * always agree:
+ * 1. a free seat in reach: sit (in a kick fight a seated player who is closer
+ *    than that seat is kicked instead);
+ * 2. otherwise whoever is nearest: a seated player in front of us is kicked, a
+ *    standing player or passenger is pushed;
+ * 3. a seated passenger is kicked only when no seated player is in kick range
+ *    (a tap that misses a player must not cost points) and nobody standing is
+ *    closer.
+ */
+export function planAction(s: GameState, p: Player): ActionPlan | undefined {
+  if (p.seatId !== null || p.eliminated) return undefined;
   const seat = seatInReach(s, p);
-  // Kick fight: standing right in front of someone seated kicks them, even
-  // when an empty seat is also within reach (the closer one wins).
-  if (seat && s.time >= p.pushReadyAt && kickBeatsSitting(s, p, seat)) return kickOffSeat(s, p, seatKickTarget(s, p)!, events);
-  if (seat) {
-    seat.playerId = p.id;
-    p.seatId = seat.id;
-    p.pos = seatSitPos(seat);
-    p.vel = { x: 0, z: 0 };
-    p.facing = seat.side > 0 ? Math.PI : 0;
-    p.kickAt = seat.priority ? s.time + CONFIG.priorityKickDelay : null;
-    events.push({ type: 'sat', playerId: p.id, seatId: seat.id });
-    if (seat.priority && p.sleeping) {
-      // Pretending to sleep: nobody asks you to stand up.
-      p.sleeping = false;
-      p.kickAt = null;
-      events.push({ type: 'slept', playerId: p.id, seatId: seat.id });
-    }
-    return;
-  }
-
-  if (s.time < p.pushReadyAt) return;
   const victim = seatKickTarget(s, p);
-  if (victim) return kickOffSeat(s, p, victim, events);
+  const victimSeat = victim ? findSeat(s, victim.seatId) : undefined;
+  const dVictim = victimSeat ? dist(p.pos, seatFront(victimSeat)) : Infinity;
+  if (seat) {
+    if (victim && s.challenge === 'kickFight' && dVictim < dist(p.pos, seatFront(seat))) return { kind: 'kick', target: victim };
+    return { kind: 'sit', seat };
+  }
   const target = pushTarget(s, p);
   const hunter = hunterInReach(s, p);
   const dTarget = target ? dist(p.pos, target.pos) : Infinity;
   const dHunter = hunter ? hunter.d : Infinity;
-  // Kicking a seated passenger: only when nobody standing is closer to push.
-  const npcSeat = npcKickSeat(s, p);
-  if (npcSeat && dist(p.pos, seatFront(npcSeat)) < Math.min(dTarget, dHunter)) return kickNpc(s, p, npcSeat, events);
-  if (hunter && dHunter < dTarget) {
-    // Pushing a passenger who races for a seat.
-    const dir = { x: hunter.st.pos.x - p.pos.x, z: hunter.st.pos.z - p.pos.z };
-    p.pushReadyAt = s.time + PUSH.cooldown;
-    p.facing = Math.atan2(dir.x, dir.z);
-    pushHunter(s, hunter.st, dir);
-    p.jumbo = false;
-    events.push({ type: 'npcPushed', by: p.id });
-    return;
-  }
-  if (!target) return;
-  const dx = target.pos.x - p.pos.x;
-  const dz = target.pos.z - p.pos.z;
-  const len = Math.hypot(dx, dz) || 1;
-  p.pushReadyAt = s.time + PUSH.cooldown;
-  p.facing = Math.atan2(dx, dz);
-  if (isShielded(s, target)) {
-    // Earphones in: the push does nothing.
-    events.push({ type: 'shielded', playerId: target.id });
-    return;
-  }
-  // Jumbo backpack (shop item): this push knocks harder.
-  const power = p.jumbo ? CONFIG.item.jumboImpulse : 1;
-  const daze = p.jumbo ? CONFIG.item.jumboStun : 1;
-  p.jumbo = false;
-  target.vel.x += (dx / len) * PUSH.impulse * power;
-  target.vel.z += (dz / len) * PUSH.impulse * power;
-  target.stunnedUntil = s.time + PUSH.stun * daze;
-  events.push({ type: 'pushed', by: p.id, target: target.id });
+  if (victim && dVictim <= Math.min(dTarget, dHunter)) return { kind: 'kick', target: victim };
+  const npcSeat = victim ? undefined : npcKickSeat(s, p);
+  if (npcSeat && dist(p.pos, seatFront(npcSeat)) < Math.min(dTarget, dHunter)) return { kind: 'npcKick', seat: npcSeat };
+  if (hunter && dHunter < dTarget) return { kind: 'pushNpc', hunter: hunter.st };
+  return target ? { kind: 'push', target } : undefined;
 }
 
+function handleAction(s: GameState, p: Player, input: PlayerInput, events: GameEvent[]): void {
+  const fresh = input.action;
+  if (fresh) p.tapUntil = s.time + CONFIG.tapMemory;
+  if (!fresh && s.time >= p.tapUntil) return; // no tap, and none remembered
+  if (p.seatId !== null) {
+    p.tapUntil = 0;
+    return;
+  }
+  if (s.time < p.stunnedUntil) return; // dazed: the tap is remembered for a moment
+
+  let plan = planAction(s, p);
+  const cooling = s.time < p.pushReadyAt;
+  // Recharging: a kick-fight kick that would beat sitting falls back to sitting.
+  if (cooling && plan?.kind === 'kick') {
+    const seat = seatInReach(s, p);
+    if (seat) plan = { kind: 'sit', seat };
+  }
+  if (!plan) {
+    p.tapUntil = 0;
+    return;
+  }
+  if (plan.kind !== 'sit' && cooling) return; // remembered until the recharge ends (or the memory runs out)
+  // Kicking a passenger costs points: never from a remembered tap, only from a tap made right there.
+  if (plan.kind === 'npcKick' && !fresh) {
+    p.tapUntil = 0;
+    return;
+  }
+  p.tapUntil = 0;
+
+  switch (plan.kind) {
+    case 'sit': {
+      const seat = plan.seat;
+      seat.playerId = p.id;
+      p.seatId = seat.id;
+      p.pos = seatSitPos(seat);
+      p.vel = { x: 0, z: 0 };
+      p.facing = seat.side > 0 ? Math.PI : 0;
+      p.kickAt = seat.priority ? s.time + CONFIG.priorityKickDelay : null;
+      p.safeUntil = s.time + CONFIG.challenge.kickSafe;
+      events.push({ type: 'sat', playerId: p.id, seatId: seat.id });
+      if (seat.priority && p.sleeping) {
+        // Pretending to sleep: nobody asks you to stand up.
+        p.sleeping = false;
+        p.kickAt = null;
+        events.push({ type: 'slept', playerId: p.id, seatId: seat.id });
+      }
+      return;
+    }
+    case 'kick':
+      return kickOffSeat(s, p, plan.target, events);
+    case 'npcKick':
+      return kickNpc(s, p, plan.seat, events);
+    case 'pushNpc': {
+      // Pushing a passenger who races for a seat.
+      const dir = { x: plan.hunter.pos.x - p.pos.x, z: plan.hunter.pos.z - p.pos.z };
+      p.pushReadyAt = s.time + PUSH.cooldown;
+      p.facing = Math.atan2(dir.x, dir.z);
+      pushHunter(s, plan.hunter, dir);
+      p.jumbo = false;
+      events.push({ type: 'npcPushed', by: p.id });
+      return;
+    }
+    case 'push': {
+      const target = plan.target;
+      const dx = target.pos.x - p.pos.x;
+      const dz = target.pos.z - p.pos.z;
+      const len = Math.hypot(dx, dz) || 1;
+      p.pushReadyAt = s.time + PUSH.cooldown;
+      p.facing = Math.atan2(dx, dz);
+      if (isShielded(s, target)) {
+        // Earphones in: the push does nothing.
+        events.push({ type: 'shielded', playerId: target.id });
+        return;
+      }
+      // Jumbo backpack (shop item): this push knocks harder.
+      const power = p.jumbo ? CONFIG.item.jumboImpulse : 1;
+      const daze = p.jumbo ? CONFIG.item.jumboStun : 1;
+      p.jumbo = false;
+      target.vel.x += (dx / len) * PUSH.impulse * power;
+      target.vel.z += (dz / len) * PUSH.impulse * power;
+      target.stunnedUntil = s.time + PUSH.stun * daze;
+      events.push({ type: 'pushed', by: p.id, target: target.id });
+    }
+  }
+}
 
 /** A seated passenger (not on a priority seat) right in front of us, during the scramble. */
 export function npcKickSeat(s: GameState, p: Player): Seat | undefined {
@@ -520,23 +584,17 @@ function kickNpc(s: GameState, p: Player, seat: Seat, events: GameEvent[]): void
   p.vel = { x: 0, z: 0 };
   p.facing = seat.side > 0 ? Math.PI : 0;
   p.kickAt = null;
+  p.safeUntil = s.time + CONFIG.challenge.kickSafe;
   events.push({ type: 'sat', playerId: p.id, seatId: seat.id });
 }
 
-/** True when a seated player is closer in front of us than the free seat we could take. */
-export function kickBeatsSitting(s: GameState, p: Player, freeSeat: Seat): boolean {
-  const victim = seatKickTarget(s, p);
-  const theirs = victim ? findSeat(s, victim.seatId) : undefined;
-  return !!theirs && dist(p.pos, seatFront(theirs)) < dist(p.pos, seatFront(freeSeat));
-}
-
-/** Kick fight: a seated player right in front of us that we could kick off their seat. */
+/** A seated player in front of us that we could kick off their seat (any stop, while the doors are open). */
 export function seatKickTarget(s: GameState, p: Player): Player | undefined {
-  if (s.challenge !== 'kickFight' || s.phase !== 'scramble' || p.seatId !== null || p.eliminated) return undefined;
+  if (s.phase !== 'scramble' || p.seatId !== null || p.eliminated) return undefined;
   let best: Player | undefined;
   let bestD: number = CONFIG.challenge.kickRange;
   for (const o of s.players) {
-    const seat = o === p || o.eliminated ? undefined : findSeat(s, o.seatId);
+    const seat = o === p || o.eliminated || s.time < o.safeUntil ? undefined : findSeat(s, o.seatId);
     if (!seat) continue;
     const d = dist(p.pos, seatFront(seat));
     if (d <= bestD) {
@@ -566,7 +624,8 @@ function kickOffSeat(s: GameState, p: Player, target: Player, events: GameEvent[
   target.vel = { x: side * 3, z: -seat.side * 1.5 };
   target.stunnedUntil = s.time + CONFIG.challenge.kickStun;
   events.push({ type: 'seatKick', by: p.id, target: target.id, seatId: seat.id });
-  addPoints(p, CONFIG.points.kick, 'kick', events);
+  // Only a kick fight pays for kicks (elsewhere it would be free points at the early, roomy stops).
+  if (s.challenge === 'kickFight') addPoints(p, CONFIG.points.kick, 'kick', events);
 }
 
 // ---------------------------------------------------------------- shop items

@@ -29,6 +29,9 @@ export const CONFIG = {
   },
 
   sitRange: 0.7,
+  // A tap while dazed or while the push/kick is recharging is remembered this
+  // long and carried out as soon as it becomes possible.
+  tapMemory: 0.3,
   priorityKickDelay: 1.1,
   priorityKickStun: 0.6,
 
@@ -64,8 +67,14 @@ export const CONFIG = {
     hunterReaction: [0.3, 0.7] as const, // seconds after the doors open
     hunterStun: 1.1, // dazed after a push
     hunterKnock: 4.5, // push knock-back speed
-    // Kick fight: kick a seated player off their seat (from in front of it).
-    kickRange: 0.85,
+    // Kicking a seated player off their seat works at every stop while the doors
+    // are open (in a kick fight the doors stay open the full time and a kick
+    // scores). The range is measured from the spot in front of the seat and
+    // reaches almost to the middle of the aisle.
+    kickRange: 1.2,
+    // Just sat down: safe from kicks this long (so the tap of whoever lost the
+    // race for that seat by a moment does not turn into a kick).
+    kickSafe: 0.5,
     kickStun: 0.9,
     kickCooldown: 2,
     // Wet floor: running onto a puddle makes you slip and shoot off a good way.
@@ -98,7 +107,7 @@ export const CONFIG = {
   points: {
     round: 10, // seated when the doors close
     win: 50,
-    kick: 5, // kicked someone off a seat
+    kick: 5, // kicked someone off a seat (kick fight only)
     allCaught: 50, // everyone taken off by officers: the game starts over and each player loses this
   },
 

@@ -2,7 +2,7 @@ import { ALL_CHALLENGES, POWER_UP_KINDS, type ChallengeKind, type GameEvent, typ
 import { cleanLook, isItemKind } from '../shop/catalog';
 
 /** Bump when messages change incompatibly; peers with another version are refused. */
-export const PROTOCOL_VERSION = 14;
+export const PROTOCOL_VERSION = 15;
 export const MAX_NAME = 14;
 
 export interface LobbyPlayer {
@@ -51,8 +51,8 @@ export interface Snapshot {
   free: number[];
   trap: number;
   winner: string;
-  /** [id, x, z, vx, vz, facing, seat, eliminated, elimRound, stunnedUntil, pushReadyAt, kickAt, shieldUntil, sleeping, score, boostUntil, slipUntil, npcStrikes, sickUntil, item (index in ITEM_KINDS + 1, 0 none), flags (1 jumbo, 2 ginger)] */
-  p: Array<[string, number, number, number, number, number, number, 0 | 1, number, number, number, number, number, 0 | 1, number, number, number, number, number, number, number]>;
+  /** [id, x, z, vx, vz, facing, seat, eliminated, elimRound, stunnedUntil, pushReadyAt, kickAt, shieldUntil, sleeping, score, boostUntil, slipUntil, npcStrikes, sickUntil, item (index in ITEM_KINDS + 1, 0 none), flags (1 jumbo, 2 ginger), safeUntil] */
+  p: Array<[string, number, number, number, number, number, number, 0 | 1, number, number, number, number, number, 0 | 1, number, number, number, number, number, number, number, number]>;
   /** Seat bags: [seatId, playerId, until]. */
   bag: Array<[number, string, number]>;
   /** Puddles [x, z, r] (wet floor challenge). */
@@ -115,6 +115,7 @@ export function packSnapshot(s: GameState, offline: Iterable<string> = [], acks:
       r3(p.sickUntil),
       p.item ? ITEM_KINDS.indexOf(p.item) + 1 : 0,
       (p.jumbo ? 1 : 0) | (p.ginger ? 2 : 0),
+      r3(p.safeUntil),
     ]),
     bag: s.seats.filter((x) => x.bagBy !== null && s.time < x.bagUntil).map((x) => [x.id, x.bagBy!, r3(x.bagUntil)]),
     pd: s.puddles.map((d) => [r3(d.x), r3(d.z), r3(d.r)]),
@@ -199,6 +200,7 @@ export function applyPlayerRow(p: Player, row: Snapshot['p'][number]): void {
   p.item = ITEM_KINDS[row[19] - 1] ?? null;
   p.jumbo = (row[20] & 1) !== 0;
   p.ginger = (row[20] & 2) !== 0;
+  p.safeUntil = row[21];
 }
 
 // --------------------------------------------------------------- validation
@@ -298,7 +300,7 @@ function isSnapshot(v: unknown): v is Snapshot {
   if (!Array.isArray(v.free) || !v.free.every(isInt) || !isInt(v.trap) || !isStr(v.winner)) return false;
   if (typeof v.npc !== 'string' || v.npc.length > 200 || !Array.isArray(v.occ) || !Array.isArray(v.p) || v.p.length > 4) return false;
   if (!v.occ.every((o) => Array.isArray(o) && o.length === 2 && isInt(o[0]) && isStr(o[1]))) return false;
-  if (!v.p.every((row) => Array.isArray(row) && row.length === 21 && isStr(row[0]) && row.slice(1).every(isNum))) return false;
+  if (!v.p.every((row) => Array.isArray(row) && row.length === 22 && isStr(row[0]) && row.slice(1).every(isNum))) return false;
   if (!Array.isArray(v.bag) || v.bag.length > 8 || !v.bag.every((b) => Array.isArray(b) && b.length === 3 && isInt(b[0]) && isStr(b[1]) && isNum(b[2]))) return false;
   if (v.ch !== '' && !ALL_CHALLENGES.includes(v.ch as ChallengeKind)) return false;
   if (!isNum(v.bk) || (v.ds !== -1 && v.ds !== 0 && v.ds !== 1)) return false;

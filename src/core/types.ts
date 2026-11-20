@@ -30,7 +30,10 @@ export interface Player {
   eliminatedInRound: number | null;
   stunnedUntil: number;
   pushReadyAt: number;
+  /** A tap that could not be carried out yet (dazed, recharging) counts until then. Host only. */
+  tapUntil: number;
   kickAt: number | null; // set while sitting on a priority seat
+  safeUntil: number; // just sat down: cannot be kicked off the seat until then
   shieldUntil: number; // earphones: pushes have no effect until then
   sleeping: boolean; // "pretend to sleep": the next priority seat is kept
   score: number; // points, carried from game to game in one session
