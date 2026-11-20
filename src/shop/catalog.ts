@@ -4,11 +4,12 @@ import { ITEM_KINDS, type ItemKind, type Look } from '../core/types';
  * TokopaEdi, the in-game shop: what can be bought and for how many coins.
  * Pure data (no DOM, no Three.js), so the network code can validate ids too.
  *
- * Accessories are cosmetic only, one per slot. Items are used once in a game
+ * Accessories are cosmetic only, one per slot (a hat and a hairstyle can be
+ * worn together). Items are used once in a game
  * (see ItemKind in core/types.ts for what they do).
  */
-export type Slot = 'head' | 'body' | 'face' | 'back';
-export const SLOTS: readonly Slot[] = ['head', 'body', 'face', 'back'];
+export type Slot = 'head' | 'hair' | 'body' | 'face' | 'back';
+export const SLOTS: readonly Slot[] = ['head', 'hair', 'body', 'face', 'back'];
 
 export type Model =
   | 'cap'
@@ -16,6 +17,12 @@ export type Model =
   | 'beanie'
   | 'peci'
   | 'caping'
+  | 'helmet'
+  | 'afro'
+  | 'emo'
+  | 'long'
+  | 'mullet'
+  | 'bald'
   | 'shirt'
   | 'hoodie'
   | 'mask'
@@ -41,7 +48,8 @@ export type ColorName =
   | 'khaki'
   | 'brown'
   | 'cream'
-  | 'straw';
+  | 'straw'
+  | 'blonde';
 
 export const COLORS: Record<ColorName, string> = {
   red: '#e2453c',
@@ -60,7 +68,12 @@ export const COLORS: Record<ColorName, string> = {
   brown: '#7a5233',
   cream: '#efe3c6',
   straw: '#d8b867',
+  blonde: '#d9b25f',
 };
+
+/** Hair uses natural shades (the catalogue's black and brown are for cloth). */
+const HAIR_COLORS: Partial<Record<ColorName, string>> = { black: '#1d1a18', brown: '#5b3b26', blonde: '#d9b25f' };
+export const hairColor = (c: ColorName): string => HAIR_COLORS[c] ?? COLORS[c];
 
 export interface Accessory {
   id: string;
@@ -76,6 +89,12 @@ const SLOT_OF: Record<Model, Slot> = {
   beanie: 'head',
   peci: 'head',
   caping: 'head',
+  helmet: 'head',
+  afro: 'hair',
+  emo: 'hair',
+  long: 'hair',
+  mullet: 'hair',
+  bald: 'hair',
   shirt: 'body',
   hoodie: 'body',
   mask: 'face',
@@ -92,6 +111,12 @@ const PRICE: Record<Model, number> = {
   beanie: 45,
   peci: 60,
   caping: 70,
+  helmet: 80,
+  afro: 65,
+  emo: 60,
+  long: 55,
+  mullet: 50,
+  bald: 20,
   shirt: 30,
   hoodie: 60,
   mask: 35,
@@ -110,6 +135,22 @@ const LIST: Array<[Model, ColorName]> = [
   ['beanie', 'yellow'],
   ['peci', 'black'],
   ['caping', 'straw'],
+  ['helmet', 'red'],
+  ['helmet', 'black'],
+  ['helmet', 'white'],
+  ['afro', 'black'],
+  ['afro', 'brown'],
+  ['afro', 'blonde'],
+  ['emo', 'black'],
+  ['emo', 'brown'],
+  ['emo', 'blonde'],
+  ['long', 'black'],
+  ['long', 'brown'],
+  ['long', 'blonde'],
+  ['mullet', 'black'],
+  ['mullet', 'brown'],
+  ['mullet', 'blonde'],
+  ['bald', 'cream'],
   ['shirt', 'white'],
   ['shirt', 'black'],
   ['shirt', 'navy'],
@@ -129,8 +170,11 @@ const LIST: Array<[Model, ColorName]> = [
   ['tote', 'cream'],
 ];
 
+/** Models sold in one version only: the id and the name carry no colour. */
+export const PLAIN: readonly Model[] = ['bald'];
+
 export const ACCESSORIES: readonly Accessory[] = LIST.map(([model, color]) => ({
-  id: `${model}-${color}`,
+  id: PLAIN.includes(model) ? model : `${model}-${color}`,
   slot: SLOT_OF[model],
   model,
   color,
@@ -182,7 +226,7 @@ export function randomLook(seed: number): Look {
   };
   const look: Look = {};
   for (const slot of SLOTS) {
-    if (next() < (slot === 'body' ? 0.6 : 0.35)) continue;
+    if (next() < (slot === 'body' ? 0.6 : slot === 'hair' ? 0.5 : 0.35)) continue;
     const options = ACCESSORIES.filter((a) => a.slot === slot);
     const pick = options[Math.floor(next() * options.length)];
     if (pick) look[slot] = pick.id;

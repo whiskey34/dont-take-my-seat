@@ -4,7 +4,7 @@ import { t, type TextKey } from '../i18n';
 import { createFigure, type Figure } from '../render/figure';
 import { dress } from '../render/outfit';
 import { PLAYER_COLORS } from '../render/palette';
-import { ACCESSORIES, COLORS, ITEM_ICON, ITEM_PRICE, SLOTS, type Accessory, type Slot } from '../shop/catalog';
+import { ACCESSORIES, COLORS, hairColor, ITEM_ICON, ITEM_PRICE, PLAIN, SLOTS, type Accessory, type Slot } from '../shop/catalog';
 import { buyAccessory, buyItem, toggleCarry, toggleWear, type ShopData } from '../shop/wallet';
 
 /**
@@ -19,6 +19,12 @@ const MODEL_ICON: Record<Accessory['model'], string> = {
   beanie: '🧶',
   peci: '🎩',
   caping: '👒',
+  helmet: '⛑️',
+  afro: '🧑‍🦱',
+  emo: '🖤',
+  long: '💇',
+  mullet: '🎸',
+  bald: '🧑‍🦲',
   shirt: '👕',
   hoodie: '🧥',
   mask: '😷',
@@ -30,6 +36,7 @@ const MODEL_ICON: Record<Accessory['model'], string> = {
 };
 
 export function accessoryName(a: Accessory): string {
+  if (PLAIN.includes(a.model)) return t(`model_${a.model}` as TextKey);
   return t('accName', { model: t(`model_${a.model}` as TextKey), color: t(`color_${a.color}` as TextKey) });
 }
 
@@ -108,7 +115,7 @@ export class ShopUI {
       const li = el('li', `card${this.trying?.id === a.id ? ' trying' : ''}${worn ? ' worn' : ''}`);
       li.dataset.acc = a.id;
       const icon = el('span', 'card-icon', MODEL_ICON[a.model]);
-      icon.style.setProperty('--swatch', COLORS[a.color]);
+      icon.style.setProperty('--swatch', a.slot === 'hair' ? hairColor(a.color) : COLORS[a.color]);
       const btn = el('button', 'btn small', '');
       btn.type = 'button';
       btn.dataset.do = owned ? 'wear' : 'buy';

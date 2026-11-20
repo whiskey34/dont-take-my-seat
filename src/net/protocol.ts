@@ -2,7 +2,7 @@ import { ALL_CHALLENGES, POWER_UP_KINDS, type ChallengeKind, type GameEvent, typ
 import { cleanLook, isItemKind } from '../shop/catalog';
 
 /** Bump when messages change incompatibly; peers with another version are refused. */
-export const PROTOCOL_VERSION = 13;
+export const PROTOCOL_VERSION = 14;
 export const MAX_NAME = 14;
 
 export interface LobbyPlayer {

@@ -2,13 +2,14 @@
 
 Dibaca otomatis di setiap sesi baru. **Isi file ini lebih baru daripada skill `dont-take-my-seat-dev`**. Kalau keduanya bertentangan, ikuti file ini dan `docs/ARCHITECTURE.md`.
 
-Terakhir diperbarui: 11 November 2026, versi **0.21.1**, protokol **v13**.
+Terakhir diperbarui: 20 November 2026, versi **0.22.0**, protokol **v14**.
 
 ## Pengguna
 
 - Berbicara bahasa Indonesia; jawab dalam bahasa Indonesia.
 - Tidak bisa compile di perangkatnya. Semua build, tes, dan deploy berjalan di cloud (GitHub Actions).
 - Main di HP (Android dan iPhone/Safari), landscape.
+- Untuk perubahan tampilan (model 3D, UI), kirim pratinjau gambar dulu dan tunggu persetujuan sebelum mengubah kode game.
 
 ## Yang berubah dibanding skill lama
 
@@ -18,11 +19,11 @@ Terakhir diperbarui: 11 November 2026, versi **0.21.1**, protokol **v13**.
 | Signaling hanya MQTT | **Cloudflare Worker** (`worker/`, WebSocket `/room/<topik>`, Durable Object) + MQTT + Nostr bersamaan (`src/net/signal/roomSignaling.ts`, `relayLink.ts` menyambung ulang sendiri) |
 | Belum ada TURN | **Cloudflare TURN** dari Worker `/turn` (`src/net/rtc/ice.ts`). URL Worker lewat variabel repo `SIGNAL_URL` → `VITE_SIGNAL_URL`, atau `?worker=URL` |
 | Pemain terputus diganti bot | **Room tanpa bot.** Pemain terputus tetap diam ("Terputus") dan bisa **Gabung lagi** dengan `playerKey` (`src/net/playerKey.ts`). Min 2 pemain |
-| `PROTOCOL_VERSION` 2 | **13** (`src/net/protocol.ts`) |
+| `PROTOCOL_VERSION` 2 | **14** (`src/net/protocol.ts`) |
 | Host keluar = room selesai | **Host pindah** ke pemain berikutnya dengan kode room yang sama (lihat ARCHITECTURE, *Keluar dan bergabung lagi*) |
 | 3 challenge, 2 power-up | Lihat daftar di bawah |
 
-## Gameplay saat ini (v0.21.0)
+## Gameplay saat ini (v0.22.0)
 
 - Perjalanan nyata Commuter Line Bogor (+ cabang Nambo), 8 stasiun acak per game (`pickRoute`, `BOGOR_LINE`, `NAMBO_BRANCH` di `config.ts`).
 - Kursi makin sedikit (`CONFIG.seats`): stop 1–2 lebih banyak dari pemain, stop 3–4 kurang satu, stop 5+ kurang dua, stasiun terakhir cuma 1 kursi.
@@ -33,7 +34,7 @@ Terakhir diperbarui: 11 November 2026, versi **0.21.1**, protokol **v13**.
 - **Menendang penumpang NPC yang duduk**: pertama −20 poin, kedua kali petugas KRL membawamu keluar (gugur). Ada model petugas, animasi, peluit. **Kalau semua pemain dibawa petugas**: game langsung mulai lagi dari stasiun pertama (rute sama) dan tiap pemain −50 poin (`CONFIG.points.allCaught`, tidak di bawah 0).
 - **Item di lantai, 1–3 per stop** (`POWER_UP_KINDS`): `earphones` (kebal dorong 4 dtk), `sleep` (aman sekali di kursi prioritas), `coffee` (es kopi, 1,4× cepat 5 dtk), `mbg` (ompreng MBG basi: hijau dan lambat 5 dtk, membatalkan kopi).
 - **Poin**: +10 per stasiun duduk, +5 per tendangan, +50 menang. Game selesai saat tinggal 1 pemain → **popup juara** (daftar, Juara 1 paling atas dengan medali 🥇🥈🥉, tanpa podium; confetti) dengan tombol **Lanjutkan**/**Keluar**, tanpa timer (di room hanya host yang melanjutkan); poin terbawa.
-- **Shop "TokopaEdi"** (tombol "Shop" berbentuk pil di **pojok kanan atas menu**, logo toko sendiri, tanpa promo, tanpa aksesoris gratis): **koin** dari main (terpisah dari poin), 24 **aksesoris** hiasan (topi, kaos, wajah, tas) dengan pratinjau 3D, **cincin identitas** warna pemain di bawah kaki, 5 **item** sekali pakai (ransel jumbo, dorongan bahu, sepatu lari, taruh tas di kursi, permen jahe), **bawa 1 per game**, pengaturan host "Item toko di room-ku". Lihat ARCHITECTURE, *Shop*.
+- **Shop "TokopaEdi"** (tombol "Shop" berbentuk pil di **pojok kanan atas menu**, logo toko sendiri, tanpa promo, tanpa aksesoris gratis): **koin** dari main (terpisah dari poin), 40 **aksesoris** hiasan dalam 5 kategori (topi termasuk **helm motor**, **rambut**: afro/emo/panjang/mullet/botak, kaos, wajah, tas) dengan pratinjau 3D; topi dan rambut bisa dipakai bersamaan, **cincin identitas** warna pemain di bawah kaki, 5 **item** sekali pakai (ransel jumbo, dorongan bahu, sepatu lari, taruh tas di kursi, permen jahe), **bawa 1 per game**, pengaturan host "Item toko di room-ku". Lihat ARCHITECTURE, *Shop*.
 - **Papan peringkat** lewat Worker `/scores` (`src/net/leaderboard.ts`).
 - **Host keluar → pemain berikutnya jadi host** (notifikasi 👑, kode sama, poin terbawa). HP host mati → pengganti ambil alih setelah 8 dtk. **Gabung lagi** ke room kosong → dibuka lagi sebagai host (10 dtk).
 - Karakter chibi bulat, animasi tendang, bintang pusing. **Tips nyala secara default, tiap tips sekali di awal** (`settings.tipsDone`; pengaturan Tips Nyala/Mati dan tombol Tampilkan tips lagi).
@@ -70,6 +71,8 @@ Cek browser dengan Playwright sesuai skill (viewport 844×390, `?signal=local` u
 - Keseimbangan: rata-rata game ~25–30 detik, bot jangan terlalu cepat. Setelah ubah gameplay, jalankan simulasi 200 game bot (selalu satu pemenang, tanpa kursi ganda).
 
 ## Riwayat singkat
+
+- 20 Nov (v0.22.0): topi dibuat ulang agar mirip topi asli (cap 6 panel, bucket, kupluk rajut, peci, caping bertali), helm motor baru, kategori Rambut baru (afro, emo, panjang, mullet, botak; 3 warna), rambut tetap terlihat di bawah topi, perbaikan potongan rambut bawaan yang menempel di samping kepala. Protokol v14.
 
 - s.d. 3 Nov: gameplay inti, multiplayer WebRTC + MQTT, SDK messenger, challenge & power-up awal.
 - 9 Nov: jadi PWA, APK dihapus, relay Nostr, TURN.

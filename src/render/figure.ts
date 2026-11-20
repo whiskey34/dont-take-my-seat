@@ -9,7 +9,8 @@ import * as THREE from 'three';
 // Everything round and soft: smooth spheres and capsules with plenty of segments.
 const headGeo = new THREE.SphereGeometry(0.26, 28, 20);
 const hairGeo = new THREE.SphereGeometry(0.274, 28, 14, 0, Math.PI * 2, 0, Math.PI * 0.52);
-const hairBackGeo = new THREE.SphereGeometry(0.27, 20, 10, Math.PI * 0.62, Math.PI * 0.76, Math.PI * 0.4, Math.PI * 0.32);
+/** A second cap tilted further back, so the hair reaches down to the nape. */
+const hairBackGeo = new THREE.SphereGeometry(0.273, 28, 12, 0, Math.PI * 2, 0, Math.PI * 0.4);
 const eyeGeo = new THREE.SphereGeometry(0.032, 12, 8);
 const browGeo = new THREE.CapsuleGeometry(0.011, 0.05, 2, 6);
 const earGeo = new THREE.SphereGeometry(0.058, 12, 8);
@@ -118,6 +119,8 @@ export function createFigure(bodyColor: string, skinColor: string, withPack: boo
     hair.rotation.x = -0.32; // sits back on the head, forehead shows
     hair.position.y = 0.012;
     const back = new THREE.Mesh(hairBackGeo, hairMat);
+    back.rotation.x = -0.53;
+    back.position.y = -0.008;
     hair.add(back);
     head.add(hair);
   }

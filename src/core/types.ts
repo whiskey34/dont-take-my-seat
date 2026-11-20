@@ -104,6 +104,7 @@ export const ITEM_KINDS: readonly ItemKind[] = ['jumboPack', 'shoulder', 'runSho
 /** Accessory ids per slot (see src/shop/catalog.ts); purely cosmetic. */
 export interface Look {
   head?: string;
+  hair?: string;
   body?: string;
   face?: string;
   back?: string;

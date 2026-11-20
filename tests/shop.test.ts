@@ -150,6 +150,16 @@ describe('catalog', () => {
     expect(cleanLook({ head: 'shirt-pink', body: 'shirt-pink', face: 42 })).toEqual({ body: 'shirt-pink' });
     for (let i = 0; i < 20; i++) expect(cleanLook(randomLook(i))).toEqual(randomLook(i));
   });
+
+  it('sells hair as its own slot, worn together with a hat', () => {
+    const hair = ACCESSORIES.filter((a) => a.slot === 'hair').map((a) => a.model);
+    for (const style of ['afro', 'emo', 'long', 'mullet', 'bald']) expect(hair).toContain(style);
+    expect(ACCESSORIES.find((a) => a.id === 'helmet-red')?.slot).toBe('head');
+    expect(cleanLook({ head: 'helmet-red', hair: 'afro-black' })).toEqual({ head: 'helmet-red', hair: 'afro-black' });
+    expect(cleanLook({ head: 'afro-black', hair: 'cap-red' })).toEqual({});
+    // Bald comes in one version only: no colour in the id.
+    expect(cleanLook({ hair: 'bald' })).toEqual({ hair: 'bald' });
+  });
 });
 
 describe('wallet', () => {
