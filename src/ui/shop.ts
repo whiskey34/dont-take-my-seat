@@ -207,11 +207,17 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls: string, text = '
   return e;
 }
 
+/** Vertical field of view when the preview is wide enough. */
+const PREVIEW_FOV = 30;
+/** Width that must always be in view: the widest outfit (caping, afro) plus a margin. */
+const PREVIEW_WIDTH = 1.95;
+const LOOK_AT = new THREE.Vector3(0, 0.95, 0);
+
 /** A small turning figure wearing the outfit. Renders only while the shop is open. */
 class Preview {
   private readonly renderer: THREE.WebGLRenderer | null;
   private readonly scene = new THREE.Scene();
-  private readonly camera = new THREE.PerspectiveCamera(30, 1, 0.1, 20);
+  private readonly camera = new THREE.PerspectiveCamera(PREVIEW_FOV, 1, 0.1, 20);
   private readonly fig: Figure;
   private raf = 0;
   private last = 0;
@@ -233,7 +239,7 @@ class Preview {
     this.fig.root.scale.setScalar(1.6);
     this.scene.add(this.fig.root);
     this.camera.position.set(0, 1.45, 4.4);
-    this.camera.lookAt(0, 0.95, 0);
+    this.camera.lookAt(LOOK_AT);
   }
 
   show(look: Look): void {
@@ -267,6 +273,11 @@ class Preview {
     if (size.x === w && size.y === h) return;
     this.renderer.setSize(w, h, false);
     this.camera.aspect = w / h;
+    // A tall, narrow preview would cut the figure off at the sides: widen the
+    // view until the whole figure fits across.
+    const dist = this.camera.position.distanceTo(LOOK_AT);
+    const half = Math.max(Math.tan(THREE.MathUtils.degToRad(PREVIEW_FOV / 2)), PREVIEW_WIDTH / 2 / (dist * this.camera.aspect));
+    this.camera.fov = THREE.MathUtils.radToDeg(2 * Math.atan(half));
     this.camera.updateProjectionMatrix();
   }
 }

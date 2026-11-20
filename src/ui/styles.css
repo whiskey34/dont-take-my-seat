@@ -1696,7 +1696,8 @@ body.ctl-swap #actionBtn {
   font-size: 12px;
 }
 
-.shop-card {
+/* Two classes: must win over .menu-card.wide (560px), or the shop stays narrow. */
+.menu-card.shop-card {
   width: min(760px, 100%);
   max-height: calc(100vh - 16px);
   max-height: calc(100dvh - 16px);
@@ -1739,8 +1740,8 @@ body.ctl-swap #actionBtn {
 }
 
 .shop-preview {
-  flex: 0 0 30%;
-  min-width: 140px;
+  flex: 0 0 38%;
+  min-width: 170px;
   border-radius: 12px;
   background: radial-gradient(circle at 50% 70%, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.03) 70%);
   border: 1px solid var(--line);

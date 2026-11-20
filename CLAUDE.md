@@ -2,7 +2,7 @@
 
 Dibaca otomatis di setiap sesi baru. **Isi file ini lebih baru daripada skill `dont-take-my-seat-dev`**. Kalau keduanya bertentangan, ikuti file ini dan `docs/ARCHITECTURE.md`.
 
-Terakhir diperbarui: 20 November 2026, versi **0.22.0**, protokol **v14**.
+Terakhir diperbarui: 20 November 2026, versi **0.22.1**, protokol **v14**.
 
 ## Pengguna
 
@@ -72,8 +72,8 @@ Cek browser dengan Playwright sesuai skill (viewport 844×390, `?signal=local` u
 
 ## Riwayat singkat
 
+- 20 Nov (v0.22.1): pratinjau karakter di toko lebih lebar (38%) dan kameranya menyesuaikan lebar kotak (tidak terpotong lagi di layar tinggi); jendela toko benar-benar 760 px (dulu tertimpa `.menu-card.wide` 560 px).
 - 20 Nov (v0.22.0): topi dibuat ulang agar mirip topi asli (cap 6 panel, bucket, kupluk rajut, peci, caping bertali), helm motor baru, kategori Rambut baru (afro, emo, panjang, mullet, botak; 3 warna), rambut tetap terlihat di bawah topi, perbaikan potongan rambut bawaan yang menempel di samping kepala. Protokol v14.
-
 - s.d. 3 Nov: gameplay inti, multiplayer WebRTC + MQTT, SDK messenger, challenge & power-up awal.
 - 9 Nov: jadi PWA, APK dihapus, relay Nostr, TURN.
 - 10 Nov (v0.8–v0.14): Worker + TURN, gabung lagi, perbaikan pemain tersangkut, stasiun Bogor asli, adu tendang, lantai becek, poin, kursi makin sedikit, es kopi, tips, karakter chibi, papan peringkat, rush hour, kursi prioritas pindah, petugas.
